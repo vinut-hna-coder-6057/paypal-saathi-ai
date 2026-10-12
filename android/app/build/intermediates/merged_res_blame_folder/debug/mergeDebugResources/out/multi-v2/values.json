@@ -1,0 +1,45 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.vinuthna.paypalsaathi.app-mergeDebugResources-2:/values/values.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\vinut\\Documents\\paypal-saathi-ai\\android\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "1",
+                        "startColumns": "4",
+                        "startOffsets": "16",
+                        "endLines": "6",
+                        "endColumns": "12",
+                        "endOffsets": "339"
+                    },
+                    "to": {
+                        "startLines": "5",
+                        "startColumns": "4",
+                        "startOffsets": "445",
+                        "endLines": "10",
+                        "endColumns": "12",
+                        "endOffsets": "768"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\vinut\\Documents\\paypal-saathi-ai\\android\\app\\src\\main\\res\\values\\strings.xml",
+                    "from": {
+                        "startLines": "3,2,1",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "157,70,16",
+                        "endColumns": "248,86,53",
+                        "endOffsets": "401,152,65"
+                    },
+                    "to": {
+                        "startLines": "2,3,4",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,304,391",
+                        "endColumns": "248,86,53",
+                        "endOffsets": "299,386,440"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">PayPal Saathi AI</string>
+    <string name="accessibility_service_name">PayPal Saathi AI Screen Monitor</string>
+    <string name="accessibility_service_description">With your explicit permission, this prototype locally classifies exposed text from the configured PayPal app. It does not save or upload screen text, click controls, or perform payments.</string>
+</resources>

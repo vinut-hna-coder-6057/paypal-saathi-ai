@@ -1,0 +1,18 @@
+R_DEF: Internal format may change without notice
+local
+id askSaathiButton
+id currentCategory
+id eventLog
+id guidanceSteps
+id guidanceTitle
+id openAccessibilitySettingsButton
+id questionInput
+id questionResult
+id refreshGuidanceButton
+id serviceStatus
+layout activity_main
+string accessibility_service_description
+string accessibility_service_name
+string app_name
+style AppTheme
+xml accessibility_service_config

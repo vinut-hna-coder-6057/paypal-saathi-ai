@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "C:\\Users\\vinut\\.gradle\\daemon\\8.9\\com.vinuthna.paypalsaathi.app-debug-4:\\xml_accessibility_service_config.xml.flat",
+        "source": "C:\\Users\\vinut\\.gradle\\daemon\\8.9\\com.vinuthna.paypalsaathi.app-main-6:\\xml\\accessibility_service_config.xml"
+    },
+    {
+        "merged": "com.vinuthna.paypalsaathi.app-debug-4:/layout_activity_main.xml.flat",
+        "source": "com.vinuthna.paypalsaathi.app-main-6:/layout/activity_main.xml"
+    },
+    {
+        "merged": "C:\\Users\\vinut\\.gradle\\daemon\\8.9\\com.vinuthna.paypalsaathi.app-debug-4:\\layout_activity_main.xml.flat",
+        "source": "C:\\Users\\vinut\\.gradle\\daemon\\8.9\\com.vinuthna.paypalsaathi.app-main-6:\\layout\\activity_main.xml"
+    }
+]

@@ -1,0 +1,73 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.vinuthna.paypalsaathi"
+4    android:versionCode="1"
+5    android:versionName="0.1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:3:5-67
+11-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:3:22-64
+12
+13    <application
+13-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:5:5-38:19
+14        android:allowBackup="false"
+14-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:6:9-36
+15        android:debuggable="true"
+16        android:extractNativeLibs="false"
+17        android:label="@string/app_name"
+17-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:7:9-41
+18        android:supportsRtl="true"
+18-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:8:9-35
+19        android:theme="@style/AppTheme"
+19-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:9:9-40
+20        android:usesCleartextTraffic="false" >
+20-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:10:9-45
+21        <activity
+21-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:12:9-21:20
+22            android:name="com.vinuthna.paypalsaathi.MainActivity"
+22-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:13:13-41
+23            android:exported="true" >
+23-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:14:13-36
+24            <intent-filter>
+24-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:16:13-19:29
+25                <action android:name="android.intent.action.MAIN" />
+25-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:17:17-69
+25-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:17:25-66
+26
+27                <category android:name="android.intent.category.LAUNCHER" />
+27-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:18:17-77
+27-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:18:27-74
+28            </intent-filter>
+29        </activity>
+30
+31        <service
+31-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:23:9-36:19
+32            android:name="com.vinuthna.paypalsaathi.accessibility.ScreenMonitorService"
+32-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:24:13-63
+33            android:exported="true"
+33-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:25:13-36
+34            android:label="@string/accessibility_service_name"
+34-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:26:13-63
+35            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" >
+35-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:27:13-79
+36            <intent-filter>
+36-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:29:13-31:29
+37                <action android:name="android.accessibilityservice.AccessibilityService" />
+37-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:30:17-92
+37-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:30:25-89
+38            </intent-filter>
+39
+40            <meta-data
+40-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:33:13-35:72
+41                android:name="android.accessibilityservice"
+41-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:34:17-60
+42                android:resource="@xml/accessibility_service_config" />
+42-->C:\Users\vinut\Documents\paypal-saathi-ai\android\app\src\main\AndroidManifest.xml:35:17-69
+43        </service>
+44    </application>
+45
+46</manifest>

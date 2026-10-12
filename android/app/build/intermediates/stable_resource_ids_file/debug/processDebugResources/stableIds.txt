@@ -1,0 +1,16 @@
+com.vinuthna.paypalsaathi:style/AppTheme = 0x7f040000
+com.vinuthna.paypalsaathi:id/questionResult = 0x7f010007
+com.vinuthna.paypalsaathi:id/serviceStatus = 0x7f010009
+com.vinuthna.paypalsaathi:id/openAccessibilitySettingsButton = 0x7f010005
+com.vinuthna.paypalsaathi:layout/activity_main = 0x7f020000
+com.vinuthna.paypalsaathi:xml/accessibility_service_config = 0x7f050000
+com.vinuthna.paypalsaathi:id/questionInput = 0x7f010006
+com.vinuthna.paypalsaathi:string/app_name = 0x7f030002
+com.vinuthna.paypalsaathi:id/eventLog = 0x7f010002
+com.vinuthna.paypalsaathi:string/accessibility_service_name = 0x7f030001
+com.vinuthna.paypalsaathi:id/askSaathiButton = 0x7f010000
+com.vinuthna.paypalsaathi:id/guidanceTitle = 0x7f010004
+com.vinuthna.paypalsaathi:id/refreshGuidanceButton = 0x7f010008
+com.vinuthna.paypalsaathi:id/guidanceSteps = 0x7f010003
+com.vinuthna.paypalsaathi:string/accessibility_service_description = 0x7f030000
+com.vinuthna.paypalsaathi:id/currentCategory = 0x7f010001
