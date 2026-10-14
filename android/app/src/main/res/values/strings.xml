@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PayPal Saathi AI</string>
+    <string name="accessibility_service_name">PayPal Saathi AI Screen Monitor</string>
+    <string name="accessibility_service_description">With your explicit permission, this companion receives window-change metadata to show its assistant only while the official PayPal app is foregrounded. It reads accessible text only from that app for local rule-based screen classification. It does not save or upload screen text, click controls, or perform payments. Disable it anytime in Accessibility settings.</string>
+
+    <string name="tagline">Simple, step-by-step payment guidance</string>
+    <string name="privacy_banner">Privacy first: with your permission, Saathi receives window-change metadata to show its independent assistant only over the official PayPal app. Accessible text from PayPal is used transiently on-device for screen classification and is not saved or uploaded. Only the detected category and a question you submit are sent to your configured Saathi server. Saathi does not click payment buttons or make payments. Never share passwords, PINs, OTPs, or card details. Verify recipient, amount, and fees in PayPal yourself.</string>
+    <string name="open_accessibility_settings">Open Accessibility Settings</string>
+    <string name="accessibility_how_to">Before Android opens Accessibility settings, Saathi explains that the service receives window-change metadata across apps to detect when PayPal is foregrounded, but reads accessible screen text only from the official PayPal app. Enable “PayPal Saathi AI Screen Monitor” only if you agree. To stop monitoring, disable that service.</string>
+    <string name="accessibility_consent_title">About screen monitoring</string>
+    <string name="accessibility_consent_message">With your permission, Saathi receives window-change metadata across apps so it can show the assistant only while the official PayPal app is foregrounded. It reads accessible text only from that PayPal app, uses the text transiently for local screen classification, and never saves or uploads screen text. The detected category is stored on this device and may be sent with a question you submit to your configured Saathi server. The floating panel is an independent overlay, is not part of PayPal, and may cover part of the screen; minimize it before using any PayPal control. Saathi does not click controls or make payments. You can disable the service in Accessibility settings at any time.</string>
+    <string name="continue_to_accessibility_settings">Continue</string>
+    <string name="accessibility_enabled">Accessibility service: enabled</string>
+    <string name="accessibility_disabled">Accessibility service: not enabled — tap the button above to open settings</string>
+    <string name="diagnostic_service_unavailable">Automatic PayPal screen detection is disabled in this diagnostic build.</string>
+    <string name="backend_checking">Backend: checking…</string>
+    <string name="backend_connected">Backend: connected (%1$s)</string>
+    <string name="backend_unavailable">Backend: unavailable (%1$s). Offline guidance is shown when possible.</string>
+
+    <string name="detected_category_waiting">Detected category: waiting for a PayPal screen event</string>
+    <string name="detected_category_fmt">Detected: %1$s (%2$s)</string>
+    <string name="empty_state">No classified PayPal screen yet. Open PayPal after enabling the accessibility service, then return here.</string>
+    <string name="saathi_guidance">Saathi guidance</string>
+    <string name="loading_guidance">Loading guidance…</string>
+    <string name="contacting_server">Contacting the local development server.</string>
+    <string name="guidance_offline_title">Offline / fallback guidance</string>
+    <string name="guidance_error_detail">Server detail: %1$s</string>
+    <string name="refresh_guidance">Refresh Guidance</string>
+    <string name="retry_guidance">Retry server</string>
+    <string name="ask_saathi_heading">Ask Saathi</string>
+    <string name="question_hint">Example: How do I find my transactions?</string>
+    <string name="ask_saathi">Ask Saathi</string>
+    <string name="answers_placeholder">Answers will appear here.</string>
+    <string name="type_question_first">Type a question first.</string>
+    <string name="question_too_long">Please keep your question to 500 characters or fewer.</string>
+    <string name="preparing_answer">Preparing an answer…</string>
+    <string name="check_paypal_app">Please check the official PayPal app.</string>
+    <string name="question_error">Could not get an answer.\n%1$s</string>
+    <string name="do_not_share_secrets">Do not include passwords, OTPs, PINs, or card details in your question.</string>
+    <string name="recent_events">Recent screen events</string>
+    <string name="no_screen_events">No screen events detected yet.</string>
+    <string name="classifier_note">Screen detection uses a rule-based (non-AI) keyword classifier. Not all PayPal screens are recognized.</string>
+    <string name="floating_assistant_initial">S</string>
+    <string name="floating_assistant_open">Open PayPal Saathi assistant</string>
+    <string name="floating_assistant_title">PayPal Saathi</string>
+    <string name="floating_assistant_minimize">Minimize PayPal Saathi</string>
+    <string name="floating_assistant_minimize_symbol">−</string>
+    <string name="floating_assistant_disclosure">Independent helper; not part of PayPal. Tap the icon to minimize. This panel may cover part of the screen.</string>
+    <string name="floating_assistant_unknown">Current screen: Unknown</string>
+    <string name="floating_assistant_unknown_explanation">Saathi could not identify this page from available accessibility text. Describe the page generally; do not share account or payment details.</string>
+    <string name="floating_assistant_suggestion">You can ask: What can I do on this screen?</string>
+    <string name="floating_assistant_suggested_question">What can I do on this screen?</string>
+    <string name="floating_assistant_empty_answer">Ask a question for general guidance. Saathi cannot verify account or transaction details.</string>
+    <string name="floating_assistant_safety">Guidance only. Verify recipient, amount, currency, and fees in PayPal. Saathi never acts for you.</string>
+    <string name="floating_assistant_question_empty">Type a general question first.</string>
+    <string name="floating_assistant_question_sensitive">Please remove credentials, codes, full card numbers, and other sensitive details. Do not share them with Saathi.</string>
+    <string name="floating_assistant_context_changed">The screen changed while Saathi was answering. Ask again for the current page.</string>
+    <string name="floating_assistant_question_error">Could not get an answer. Check your connection and try again.</string>
+    <string name="floating_assistant_question_context">Current screen: %1$s\n\n%2$s</string>
+    <string name="floating_assistant_no_paypal_context">PayPal is no longer the active app. Screen context was cleared.</string>
+</resources>

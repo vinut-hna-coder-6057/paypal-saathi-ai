@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_how_to">Automatic PayPal screen detection is intentionally unavailable in this diagnostic build. Guidance, backend connectivity, and manually submitted questions remain available.</string>
+    <string name="empty_state">Automatic screen detection is disabled in this diagnostic build. Guidance remains available; select Refresh Guidance or ask a question.</string>
+</resources>

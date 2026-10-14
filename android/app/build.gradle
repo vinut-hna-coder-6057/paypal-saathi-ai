@@ -1,0 +1,117 @@
+plugins {
+    id 'com.android.application'
+}
+
+def apiBaseUrl = project.findProperty('API_BASE_URL') ?: 'http://127.0.0.1:3000'
+def releaseApiBaseUrl = project.findProperty('RELEASE_API_BASE_URL') ?: 'https://api.example.com'
+def releaseSigning = [
+    storeFile: providers.environmentVariable('PAYPAL_SAATHI_RELEASE_STORE_FILE').orNull,
+    storePassword: providers.environmentVariable('PAYPAL_SAATHI_RELEASE_STORE_PASSWORD').orNull,
+    keyAlias: providers.environmentVariable('PAYPAL_SAATHI_RELEASE_KEY_ALIAS').orNull,
+    keyPassword: providers.environmentVariable('PAYPAL_SAATHI_RELEASE_KEY_PASSWORD').orNull
+]
+def releaseSigningConfigured = releaseSigning.values().every {
+    it != null && !it.trim().isEmpty()
+}
+
+android {
+    namespace 'com.vinuthna.paypalsaathi'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.vinuthna.paypalsaathi'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            if (releaseSigningConfigured) {
+                storeFile file(releaseSigning.storeFile)
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            buildConfigField 'boolean', 'DIAGNOSTIC_BUILD', 'false'
+            buildConfigField 'String', 'API_BASE_URL', "\"${apiBaseUrl}\""
+        }
+        diagnosticDebug {
+            initWith debug
+            applicationIdSuffix '.diagnostic'
+            matchingFallbacks = ['debug']
+            buildConfigField 'boolean', 'DIAGNOSTIC_BUILD', 'true'
+            buildConfigField 'String', 'API_BASE_URL', '"http://127.0.0.1:3000"'
+        }
+        release {
+            minifyEnabled false
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.release
+            }
+            buildConfigField 'String', 'API_BASE_URL', "\"${releaseApiBaseUrl}\""
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
+
+def verifyReleaseConfiguration = tasks.register('verifyReleaseConfiguration') {
+    doLast {
+        def requiredVariables = [
+            'PAYPAL_SAATHI_RELEASE_STORE_FILE',
+            'PAYPAL_SAATHI_RELEASE_STORE_PASSWORD',
+            'PAYPAL_SAATHI_RELEASE_KEY_ALIAS',
+            'PAYPAL_SAATHI_RELEASE_KEY_PASSWORD'
+        ]
+        def missingVariables = requiredVariables.findAll {
+            def value = providers.environmentVariable(it).orNull
+            value == null || value.trim().isEmpty()
+        }
+
+        if (!missingVariables.isEmpty()) {
+            throw new GradleException(
+                    "Release signing is not configured. Set these environment " +
+                    "variables locally: ${missingVariables.join(', ')}. " +
+                    "No unsigned release APK will be produced.")
+        }
+
+        def keystorePath =
+                providers.environmentVariable('PAYPAL_SAATHI_RELEASE_STORE_FILE').get()
+        if (!file(keystorePath).isFile()) {
+            throw new GradleException(
+                    'PAYPAL_SAATHI_RELEASE_STORE_FILE must point to an existing keystore.')
+        }
+
+        def releaseUri = new URI(releaseApiBaseUrl)
+        if (!'https'.equalsIgnoreCase(releaseUri.scheme)
+                || releaseUri.host == null
+                || releaseUri.host.equalsIgnoreCase('example.com')
+                || releaseUri.host.toLowerCase(Locale.ROOT).endsWith('.example.com')) {
+            throw new GradleException(
+                    'Set RELEASE_API_BASE_URL to the deployed HTTPS API before building a release.')
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == 'preReleaseBuild') {
+        dependsOn verifyReleaseConfiguration
+    }
+}

@@ -1,0 +1,75 @@
+# Node
+backend/node_modules/
+backend/data/
+backend/.env
+backend/npm-debug.log*
+backend/yarn-error.log*
+
+# Android / Gradle
+android/.gradle/
+android/local.properties
+android/**/build/
+android/captures/
+android/*.iml
+android/.idea/
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Signing & secrets
+*.jks
+*.keystore
+*.pem
+*.p12
+secrets/
+credentials.json
+google-services.json
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+*.log
+tmp/
+temp/
+.cache/
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs and caches
+.gradle/
+**/.gradle/
+build/
+**/build/
+dist/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Signing keys and credentials
+*.jks
+*.keystore
+firebaseServiceAccount.json
+
+# Local databases and generated AI artifacts
+*.sqlite
+*.sqlite-*
+*.db
+*.gguf
+*.onnx
+
+# Logs and temporary files
+*.log
+*.tmp
