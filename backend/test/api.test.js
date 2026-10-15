@@ -50,6 +50,18 @@ test('GET /health returns service metadata', async () => {
     assert.equal(json.classifier, 'rules');
     assert.equal(json.modelIntegrated, true);
     assert.ok(Array.isArray(json.supportedScreenCategories));
+    assert.deepEqual(
+      Object.keys(json).sort(),
+      [
+        'status',
+        'service',
+        'version',
+        'classifier',
+        'modelIntegrated',
+        'pipelineMetrics',
+        'supportedScreenCategories'
+      ].sort()
+    );
   } finally {
     server.close();
   }
@@ -149,10 +161,20 @@ test('POST /api/classify validates and classifies questions', async () => {
     assert.equal(ok.json.screenCategory, 'unknown');
     assert.ok(ok.json.guidance);
     assert.ok(ok.json.disclaimer);
+    assert.equal(ok.json.nextStep.status, 'need_user_description');
     assert.deepEqual(
       Object.keys(ok.json).sort(),
-      ['category', 'guidance', 'disclaimer', 'matchedBy', 'screenCategory'].sort()
+      [
+        'category',
+        'guidance',
+        'disclaimer',
+        'matchedBy',
+        'screenCategory',
+        'nextStep',
+        'screenClassification'
+      ].sort()
     );
+    assert.equal(ok.json.screenClassification, null);
 
     const contextual = await request(port, 'POST', '/api/classify', {
       question: 'What should I check next?',
@@ -161,6 +183,7 @@ test('POST /api/classify validates and classifies questions', async () => {
     assert.equal(contextual.status, 200);
     assert.equal(contextual.json.screenCategory, 'review_payment');
     assert.equal(contextual.json.category, 'general');
+    assert.equal(contextual.json.nextStep, null);
     assert.match(
       contextual.json.guidance,
       /official PayPal Help documentation does not provide enough evidence/i
@@ -200,6 +223,10 @@ test('POST /api/classify ignores stale context and rejects raw or oversized cont
       screenContext: {
         category: 'activity',
         visibleLabels: ['Activity'],
+        confidence: 82,
+        evidenceStrength: 'moderate',
+        ambiguous: false,
+        evidenceCodes: ['activity_heading'],
         source: 'accessibility',
         observedAt: Date.now() - 60_000
       }
@@ -208,7 +235,15 @@ test('POST /api/classify ignores stale context and rejects raw or oversized cont
     assert.equal(stale.json.screenCategory, 'activity');
     assert.deepEqual(
       Object.keys(stale.json).sort(),
-      ['category', 'guidance', 'disclaimer', 'matchedBy', 'screenCategory'].sort()
+      [
+        'category',
+        'guidance',
+        'disclaimer',
+        'matchedBy',
+        'screenCategory',
+        'nextStep',
+        'screenClassification'
+      ].sort()
     );
     assert.doesNotMatch(stale.text, /Activity/);
 
@@ -223,6 +258,10 @@ test('POST /api/classify ignores stale context and rejects raw or oversized cont
       {
         category: 'activity',
         visibleLabels: Array(9).fill('Activity'),
+        confidence: 82,
+        evidenceStrength: 'moderate',
+        ambiguous: false,
+        evidenceCodes: ['activity_heading'],
         source: 'accessibility',
         observedAt: Date.now()
       }
@@ -232,9 +271,58 @@ test('POST /api/classify ignores stale context and rejects raw or oversized cont
         screenCategory: 'activity',
         screenContext
       });
+
       assert.equal(invalid.status, 400);
       assert.doesNotMatch(invalid.text, /synthetic raw accessibility text/);
     }
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /api/classify returns a single position-aware sending step', async () => {
+  const app = createApp();
+  const { server, port } = await listen(app);
+
+  try {
+    const { status, json } = await request(port, 'POST', '/api/classify', {
+      question: 'How do I send money?',
+      screenCategory: 'home',
+      screenContext: {
+        category: 'home',
+        visibleLabels: ['Send', 'Request', 'person@example.test'],
+        actionableElements: [
+          'Send|bottom|left',
+          'Request|bottom|right',
+          'person@example.test|middle|center'
+        ],
+        confidence: 82,
+        evidenceStrength: 'moderate',
+        ambiguous: false,
+        evidenceCodes: ['home_action_combination'],
+        source: 'accessibility',
+        observedAt: Date.now()
+      }
+    });
+
+    assert.equal(status, 200);
+    assert.equal(json.matchedBy, 'screen_rules');
+    assert.equal(json.nextStep.expectedNextScreen, 'recipient_selection');
+    assert.equal(json.nextStep.status, 'awaiting_user');
+    assert.deepEqual(json.screenClassification, {
+      category: 'home',
+      confidence: 82,
+      evidenceStrength: 'moderate',
+      ambiguous: false,
+      evidenceCodes: ['home_action_combination'],
+      actionableElements: [
+        'Send|bottom|left',
+        'Request|bottom|right'
+      ]
+    });
+    assert.doesNotMatch(JSON.stringify(json), /person@example\.test/);
+    assert.match(json.guidance, /bottom left/i);
+    assert.match(json.guidance, /“Send” button/);
   } finally {
     server.close();
   }

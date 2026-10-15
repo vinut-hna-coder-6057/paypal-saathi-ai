@@ -5,6 +5,8 @@ import { getPipelineMetrics } from '../services/pipelineMetrics.js';
 
 export const healthRouter = Router();
 
+// This endpoint confirms the HTTP process is responsive; optional AI/data
+// dependencies remain lazy-loaded and are not checked here.
 healthRouter.get('/', (_req, res) => {
   res.status(200).json({
     status: 'ok',

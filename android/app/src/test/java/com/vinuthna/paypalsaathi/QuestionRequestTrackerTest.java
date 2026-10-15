@@ -47,6 +47,65 @@ public class QuestionRequestTrackerTest {
     }
 
     @Test
+    public void staleResponseCannotFinishNewerRequestAfterCategoryChange() {
+        QuestionRequestTracker tracker = new QuestionRequestTracker();
+        tracker.updateScreenCategory(ScreenCategories.HOME);
+        QuestionRequestTracker.Request stale =
+                tracker.begin("How do I send money?");
+
+        tracker.updateScreenCategory(ScreenCategories.SECURITY);
+        QuestionRequestTracker.Request current =
+                tracker.begin("What should I do on this screen?");
+
+        tracker.finish(stale);
+
+        assertFalse(tracker.isCurrent(stale));
+        assertTrue(tracker.isCurrent(current));
+    }
+
+    @Test
+    public void uncertainContextInvalidatesRequestsWithoutChangingLastCategory() {
+        QuestionRequestTracker tracker = new QuestionRequestTracker();
+        tracker.updateScreenCategory(ScreenCategories.HOME);
+        QuestionRequestTracker.Request request =
+                tracker.begin("How do I send money?");
+
+        tracker.invalidateRequests();
+
+        assertFalse(tracker.isCurrent(request));
+        assertEquals(ScreenCategories.HOME, tracker.screenCategory());
+    }
+
+    @Test
+    public void identicalCategorySnapshotDoesNotInvalidateActiveRequest() {
+        QuestionRequestTracker tracker = new QuestionRequestTracker();
+        tracker.updateScreenContext(
+                ScreenCategories.HOME,
+                Arrays.asList("Home"),
+                Arrays.asList("Send|bottom|left"),
+                82,
+                "moderate",
+                false,
+                Arrays.asList("home_action_combination"),
+                1_000L);
+        QuestionRequestTracker.Request request =
+                tracker.begin("How do I send money?");
+
+        boolean changed = tracker.updateScreenContext(
+                ScreenCategories.HOME,
+                Arrays.asList("Home"),
+                Arrays.asList("Send|bottom|left"),
+                82,
+                "moderate",
+                false,
+                Arrays.asList("home_action_combination"),
+                1_100L);
+
+        assertFalse(changed);
+        assertTrue(tracker.isCurrent(request));
+    }
+
+    @Test
     public void snapshotsOnlyAllowListedRecentNavigationLabels() {
         QuestionRequestTracker tracker = new QuestionRequestTracker();
         long observedAt = System.currentTimeMillis();
@@ -75,6 +134,26 @@ public class QuestionRequestTrackerTest {
         tracker.updateScreenContext(
                 ScreenCategories.HOME,
                 Arrays.asList("Activity"),
+                System.currentTimeMillis());
+
+        assertFalse(tracker.isCurrent(request));
+    }
+
+    @Test
+    public void actionableControlChangesInvalidateOlderAnswers() {
+        QuestionRequestTracker tracker = new QuestionRequestTracker();
+        tracker.updateScreenContext(
+                ScreenCategories.HOME,
+                Arrays.asList("Home"),
+                Arrays.asList("Send|bottom|left"),
+                System.currentTimeMillis());
+        QuestionRequestTracker.Request request =
+                tracker.begin("How do I send money?");
+
+        tracker.updateScreenContext(
+                ScreenCategories.HOME,
+                Arrays.asList("Home"),
+                Arrays.asList("Request|bottom|right"),
                 System.currentTimeMillis());
 
         assertFalse(tracker.isCurrent(request));

@@ -6,10 +6,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.accessibilityservice.AccessibilityServiceInfo;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
@@ -17,6 +17,8 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.core.content.ContextCompat;
 
 import com.vinuthna.paypalsaathi.detection.ScreenCategories;
 
@@ -46,6 +48,7 @@ public class MainActivity extends Activity {
     private boolean receiverRegistered = false;
     private boolean guidanceRequestInFlight = false;
     private int guidanceRequestId;
+    private final HealthRequestGate healthRequestGate = new HealthRequestGate();
     private final QuestionRequestTracker questionRequestTracker =
             new QuestionRequestTracker();
 
@@ -66,6 +69,16 @@ public class MainActivity extends Activity {
                     ScreenMonitorContract.EXTRA_EVENT_TYPE);
             ArrayList<String> visibleLabels = intent.getStringArrayListExtra(
                     ScreenMonitorContract.EXTRA_VISIBLE_LABELS);
+            ArrayList<String> actionableElements = intent.getStringArrayListExtra(
+                    ScreenMonitorContract.EXTRA_ACTIONABLE_ELEMENTS);
+            int confidence = intent.getIntExtra(
+                    ScreenMonitorContract.EXTRA_CONFIDENCE, 0);
+            String evidenceStrength = intent.getStringExtra(
+                    ScreenMonitorContract.EXTRA_EVIDENCE_STRENGTH);
+            boolean ambiguous = intent.getBooleanExtra(
+                    ScreenMonitorContract.EXTRA_AMBIGUOUS, true);
+            ArrayList<String> evidenceCodes = intent.getStringArrayListExtra(
+                    ScreenMonitorContract.EXTRA_EVIDENCE_CODES);
             long observedAt = intent.getLongExtra(
                     ScreenMonitorContract.EXTRA_OBSERVED_AT,
                     0L);
@@ -77,6 +90,11 @@ public class MainActivity extends Activity {
                         ScreenCategories.UNKNOWN,
                         eventType,
                         false,
+                        new ArrayList<>(),
+                        new ArrayList<>(),
+                        0,
+                        "insufficient",
+                        true,
                         new ArrayList<>(),
                         0L);
                 return;
@@ -97,6 +115,11 @@ public class MainActivity extends Activity {
                     eventType,
                     categoryChanged,
                     visibleLabels,
+                    actionableElements,
+                    confidence,
+                    evidenceStrength,
+                    ambiguous,
+                    evidenceCodes,
                     observedAt);
         }
     };
@@ -178,6 +201,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        healthRequestGate.close();
         guidanceRequestId++;
         questionRequestTracker.invalidate();
         unregisterEventReceiver();
@@ -192,15 +216,11 @@ public class MainActivity extends Activity {
         IntentFilter filter = new IntentFilter(
                 ScreenMonitorContract.ACTION_SCREEN_CATEGORY);
 
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(
-                    eventReceiver,
-                    filter,
-                    Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(eventReceiver, filter);
-        }
-
+        ContextCompat.registerReceiver(
+                this,
+                eventReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED);
         receiverRegistered = true;
     }
 
@@ -228,6 +248,11 @@ public class MainActivity extends Activity {
                 eventType,
                 fetchGuidance,
                 new ArrayList<>(),
+                new ArrayList<>(),
+                0,
+                "insufficient",
+                true,
+                new ArrayList<>(),
                 0L);
     }
 
@@ -236,11 +261,21 @@ public class MainActivity extends Activity {
             String eventType,
             boolean fetchGuidance,
             List<String> visibleLabels,
+            List<String> actionableElements,
+            int confidence,
+            String evidenceStrength,
+            boolean ambiguous,
+            List<String> evidenceCodes,
             long observedAt
     ) {
         boolean categoryChanged = questionRequestTracker.updateScreenContext(
                 category,
                 visibleLabels,
+                actionableElements,
+                confidence,
+                evidenceStrength,
+                ambiguous,
+                evidenceCodes,
                 observedAt);
         lastCategory = questionRequestTracker.screenCategory();
 
@@ -318,13 +353,12 @@ public class MainActivity extends Activity {
                     showGuidance(fallback, true);
                     guidanceTitle.setText(getString(
                             R.string.guidance_offline_title));
-                    guidanceSteps.setText(
-                            GuidanceClient.formatSteps(fallback)
-                                    + "\n\n"
-                                    + getString(
-                                    R.string.guidance_error_detail, message));
+                    guidanceSteps.setText(getString(
+                            R.string.guidance_offline_with_error,
+                            GuidanceClient.formatSteps(fallback),
+                            getString(R.string.guidance_error_detail, message)));
                     retryButton.setVisibility(View.VISIBLE);
-                    backendStatus.setText(getString(
+                    updateBackendStatus(getString(
                             R.string.backend_unavailable,
                             GuidanceClient.baseUrl()));
                 });
@@ -339,7 +373,7 @@ public class MainActivity extends Activity {
         guidanceSteps.setText(GuidanceClient.formatSteps(response));
 
         if (!offline) {
-            backendStatus.setText(getString(
+            updateBackendStatus(getString(
                     R.string.backend_connected,
                     GuidanceClient.baseUrl()));
             retryButton.setVisibility(View.GONE);
@@ -379,6 +413,11 @@ public class MainActivity extends Activity {
                 request.question(),
                 request.screenCategory(),
                 request.visibleLabels(),
+                request.actionableElements(),
+                request.confidence(),
+                request.evidenceStrength(),
+                request.ambiguous(),
+                request.evidenceCodes(),
                 request.observedAt(),
                 new GuidanceClient.Callback() {
                     @Override
@@ -434,23 +473,42 @@ public class MainActivity extends Activity {
     }
 
     private void checkBackendHealth() {
+        long requestId = healthRequestGate.beginRequest();
+        if (requestId < 0L) {
+            return;
+        }
         backendStatus.setText(R.string.backend_checking);
 
         GuidanceClient.checkHealth(new GuidanceClient.Callback() {
             @Override
             public void onSuccess(JSONObject response) {
-                runOnUiThread(() -> backendStatus.setText(getString(
-                        R.string.backend_connected,
-                        GuidanceClient.baseUrl())));
+                runOnUiThread(() -> {
+                    if (!healthRequestGate.isCurrent(requestId)) {
+                        return;
+                    }
+                    updateBackendStatus(getString(
+                            R.string.backend_connected,
+                            GuidanceClient.baseUrl()));
+                });
             }
 
             @Override
             public void onError(String message) {
-                runOnUiThread(() -> backendStatus.setText(getString(
-                        R.string.backend_unavailable,
-                        GuidanceClient.baseUrl())));
+                runOnUiThread(() -> {
+                    if (!healthRequestGate.isCurrent(requestId)) {
+                        return;
+                    }
+                    updateBackendStatus(getString(
+                            R.string.backend_unavailable,
+                            GuidanceClient.baseUrl()));
+                });
             }
         });
+    }
+
+    private void updateBackendStatus(String message) {
+        healthRequestGate.invalidate();
+        backendStatus.setText(message);
     }
 
     private void setGuidanceLoading(boolean loading) {

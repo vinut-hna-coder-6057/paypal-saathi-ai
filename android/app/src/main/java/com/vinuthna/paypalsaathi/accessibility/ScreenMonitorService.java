@@ -2,7 +2,13 @@ package com.vinuthna.paypalsaathi.accessibility;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
+import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
+import android.util.DisplayMetrics;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -13,6 +19,7 @@ import com.vinuthna.paypalsaathi.ScreenContext;
 import com.vinuthna.paypalsaathi.ScreenMonitorContract;
 import com.vinuthna.paypalsaathi.detection.ScreenClassifier;
 import com.vinuthna.paypalsaathi.detection.ScreenCategories;
+import com.vinuthna.paypalsaathi.detection.ScreenClassification;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -31,18 +38,26 @@ import java.util.Set;
  * - Never clicks controls or submits payments.
  */
 public class ScreenMonitorService extends AccessibilityService {
+    private static final String TAG = "SaathiScreenMonitor";
     private static final String PAYPAL_PACKAGE =
             "com.paypal.android.p2pmobile";
     private static final int MAX_TEXT_CHARS = 2_000;
     private static final int MAX_DEPTH = 18;
     private static final int MAX_NODES = 120;
     private static final int MAX_NAVIGATION_HINTS = 6;
+    private static final int MAX_ACTIONABLE_ELEMENTS = 8;
+    // Bound both missing-root recovery and weak-evidence stabilization equally.
+    private static final long CATEGORY_UNCERTAINTY_GRACE_MS = 1_000L;
 
     private final CategoryEventGate categoryEventGate = new CategoryEventGate();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final RootUnavailableCategoryPolicy rootUnavailablePolicy =
+            new RootUnavailableCategoryPolicy(CATEGORY_UNCERTAINTY_GRACE_MS);
 
     private FloatingAssistantOverlay overlay;
     private boolean paypalActive;
     private String currentCategory = ScreenCategories.UNKNOWN;
+    private Runnable pendingUncertainCategory;
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -51,23 +66,38 @@ public class ScreenMonitorService extends AccessibilityService {
         }
 
         String packageName = event.getPackageName().toString();
+        int eventType = event.getEventType();
 
-        if (!isWindowTransitionEvent(event.getEventType())
+        if (!isWindowTransitionEvent(eventType)
                 && !PAYPAL_PACKAGE.equals(packageName)) {
             return;
         }
 
-        int eventType = event.getEventType();
+        boolean logEvent = isWindowTransitionEvent(eventType)
+                || (!paypalActive && PAYPAL_PACKAGE.equals(packageName));
+        if (logEvent) {
+            Log.d(TAG, "Accessibility event: package=" + packageName
+                    + ", type=" + AccessibilityEvent.eventTypeToString(eventType));
+        }
+        String foregroundPackage = foregroundApplicationPackage();
+        if (logEvent) {
+            Log.d(TAG, "Foreground application: "
+                    + (foregroundPackage == null ? "unknown" : foregroundPackage));
+        }
         OverlayForegroundPolicy.Decision decision =
                 OverlayForegroundPolicy.decide(
                         packageName,
-                        foregroundApplicationPackage(),
+                        foregroundPackage,
                         PAYPAL_PACKAGE,
                         getPackageName());
         if (decision == OverlayForegroundPolicy.Decision.IGNORE) {
+            if (logEvent) {
+                Log.d(TAG, "Ignoring event for foreground policy.");
+            }
             return;
         }
         if (decision == OverlayForegroundPolicy.Decision.HIDE) {
+            Log.i(TAG, "PayPal is no longer foreground; hiding assistant.");
             leavePayPal();
             return;
         }
@@ -81,18 +111,32 @@ public class ScreenMonitorService extends AccessibilityService {
         // Text is used transiently in memory for coarse classification only.
         StringBuilder transientText = new StringBuilder();
         Set<String> navigationHints = new LinkedHashSet<>();
+        Set<String> actionableElements = new LinkedHashSet<>();
         int[] visitedNodes = {0};
+        DisplayMetrics screenMetrics = new DisplayMetrics();
+        WindowManager windowManager = (WindowManager) getSystemService(
+                WINDOW_SERVICE);
+        if (windowManager != null) {
+            windowManager.getDefaultDisplay().getRealMetrics(screenMetrics);
+        } else {
+            screenMetrics.setTo(getResources().getDisplayMetrics());
+        }
         AccessibilityNodeInfo root = getRootInActiveWindow();
-
-        if (root != null
+        boolean rootPackageMatches = root != null
                 && root.getPackageName() != null
-                && PAYPAL_PACKAGE.contentEquals(root.getPackageName())) {
+                && PAYPAL_PACKAGE.contentEquals(root.getPackageName());
+        boolean paypalRootAvailable = root != null && rootPackageMatches;
+
+        if (paypalRootAvailable) {
             try {
                 collectSafeText(
                         root,
                         transientText,
                         navigationHints,
+                        actionableElements,
                         visitedNodes,
+                        screenMetrics.widthPixels,
+                        screenMetrics.heightPixels,
                         0);
             } finally {
                 root.recycle();
@@ -101,29 +145,88 @@ public class ScreenMonitorService extends AccessibilityService {
             root.recycle();
         }
 
-        String category = ScreenClassifier.classify(transientText.toString());
+        if (!paypalRootAvailable) {
+            long elapsedRealtime = SystemClock.elapsedRealtime();
+            if (rootUnavailablePolicy.shouldPreserve(
+                    currentCategory,
+                    root != null,
+                    rootPackageMatches,
+                    elapsedRealtime)) {
+                if (overlay != null) {
+                    overlay.markScreenContextUncertain();
+                }
+                scheduleUncertainCategoryExpiry(eventType);
+                return;
+            }
+            resetCategoryUncertainty();
+        }
+
+        List<String> actionList = new ArrayList<>(actionableElements);
+        ScreenClassification classification = ScreenClassifier.classifyScreen(
+                transientText.toString(),
+                actionList,
+                packageName);
         transientText.setLength(0);
         List<String> safeNavigationHints = new ArrayList<>(navigationHints);
         long observedAt = System.currentTimeMillis();
 
+        if (ScreenCategories.UNKNOWN.equals(classification.category())
+                && rootUnavailablePolicy.shouldPreserveUncertainCategory(
+                        currentCategory,
+                        SystemClock.elapsedRealtime())) {
+            if (overlay != null) {
+                overlay.markScreenContextUncertain();
+            }
+            scheduleUncertainCategoryExpiry(eventType);
+            return;
+        }
+        resetCategoryUncertainty();
+
+        publishClassification(
+                classification,
+                safeNavigationHints,
+                eventTypeLabel(eventType),
+                observedAt);
+    }
+
+    private void publishClassification(
+            ScreenClassification classification,
+            List<String> safeNavigationHints,
+            String eventLabel,
+            long observedAt
+    ) {
+        String category = classification.category();
+        List<String> safeActionableElements =
+                classification.actionableElements();
         boolean categoryChanged = !category.equals(currentCategory);
         currentCategory = category;
         if (overlay != null) {
             overlay.updateScreenContext(
                     category,
                     safeNavigationHints,
+                    safeActionableElements,
+                    classification.confidence(),
+                    classification.evidenceStrength(),
+                    classification.ambiguous(),
+                    classification.evidenceCodes(),
                     observedAt);
         }
 
         if (!categoryEventGate.shouldEmit(
                 category,
                 safeNavigationHints,
+                safeActionableElements,
                 SystemClock.elapsedRealtime())) {
             return;
         }
 
-        String eventLabel = eventTypeLabel(eventType);
-        CategoryStore.save(this, category, eventLabel);
+        CategoryStore.save(
+                this,
+                category,
+                eventLabel,
+                classification.confidence(),
+                classification.evidenceStrength(),
+                classification.ambiguous());
 
         Intent intent = new Intent(ScreenMonitorContract.ACTION_SCREEN_CATEGORY);
         intent.setPackage(getPackageName());
@@ -137,15 +240,82 @@ public class ScreenMonitorService extends AccessibilityService {
         intent.putStringArrayListExtra(
                 ScreenMonitorContract.EXTRA_VISIBLE_LABELS,
                 new ArrayList<>(safeNavigationHints));
+        intent.putStringArrayListExtra(
+                ScreenMonitorContract.EXTRA_ACTIONABLE_ELEMENTS,
+                new ArrayList<>(safeActionableElements));
+        intent.putExtra(
+                ScreenMonitorContract.EXTRA_CONFIDENCE,
+                classification.confidence());
+        intent.putExtra(
+                ScreenMonitorContract.EXTRA_EVIDENCE_STRENGTH,
+                classification.evidenceStrength());
+        intent.putExtra(
+                ScreenMonitorContract.EXTRA_AMBIGUOUS,
+                classification.ambiguous());
+        intent.putStringArrayListExtra(
+                ScreenMonitorContract.EXTRA_EVIDENCE_CODES,
+                new ArrayList<>(classification.evidenceCodes()));
         intent.putExtra(ScreenMonitorContract.EXTRA_OBSERVED_AT, observedAt);
         sendBroadcast(intent);
+    }
+
+    private void scheduleUncertainCategoryExpiry(int eventType) {
+        if (pendingUncertainCategory != null) {
+            return;
+        }
+
+        long remainingMs = rootUnavailablePolicy.remainingMs(
+                SystemClock.elapsedRealtime());
+        Runnable expiry = new Runnable() {
+            @Override
+            public void run() {
+                if (pendingUncertainCategory != this) {
+                    return;
+                }
+                pendingUncertainCategory = null;
+                if (!paypalActive
+                        || !ScreenCategories.isKnownCategory(currentCategory)
+                        || ScreenCategories.UNKNOWN.equals(currentCategory)) {
+                    return;
+                }
+                if (rootUnavailablePolicy.shouldPreserve(
+                        currentCategory,
+                        false,
+                        false,
+                        SystemClock.elapsedRealtime())) {
+                    scheduleUncertainCategoryExpiry(eventType);
+                    return;
+                }
+
+                publishClassification(
+                        ScreenClassification.unknown(
+                                false,
+                                "insufficient_accessibility"),
+                        new ArrayList<>(),
+                        eventTypeLabel(eventType),
+                        System.currentTimeMillis());
+            }
+        };
+        pendingUncertainCategory = expiry;
+        mainHandler.postDelayed(expiry, remainingMs);
+    }
+
+    private void resetCategoryUncertainty() {
+        if (pendingUncertainCategory != null) {
+            mainHandler.removeCallbacks(pendingUncertainCategory);
+            pendingUncertainCategory = null;
+        }
+        rootUnavailablePolicy.reset();
     }
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        Log.i(TAG, "Accessibility service connected.");
         overlay = new FloatingAssistantOverlay(this);
         String foregroundPackage = foregroundApplicationPackage();
+        Log.i(TAG, "Foreground application at connection: "
+                + (foregroundPackage == null ? "unknown" : foregroundPackage));
         if (PAYPAL_PACKAGE.equals(foregroundPackage)) {
             enterPayPal();
         }
@@ -155,16 +325,25 @@ public class ScreenMonitorService extends AccessibilityService {
             AccessibilityNodeInfo node,
             StringBuilder output,
             Set<String> navigationHints,
+            Set<String> actionableElements,
             int[] visitedNodes,
+            int screenWidth,
+            int screenHeight,
             int depth
     ) {
         if (node == null
                 || depth > MAX_DEPTH
-                || output.length() >= MAX_TEXT_CHARS
                 || visitedNodes[0] >= MAX_NODES) {
             return;
         }
         visitedNodes[0]++;
+
+        Rect clickableBounds = null;
+        if (node.isClickable()) {
+            Rect nodeBounds = new Rect();
+            node.getBoundsInScreen(nodeBounds);
+            clickableBounds = nodeBounds;
+        }
 
         // Do not inspect password fields or their descendants.
         if (node.isPassword()) {
@@ -175,17 +354,28 @@ public class ScreenMonitorService extends AccessibilityService {
         if (text != null) {
             appendLimited(output, text.toString());
             addNavigationHint(navigationHints, text);
+            addActionableElement(
+                    actionableElements,
+                    text,
+                    clickableBounds,
+                    screenWidth,
+                    screenHeight);
         }
 
         CharSequence description = node.getContentDescription();
         if (description != null) {
             appendLimited(output, description.toString());
             addNavigationHint(navigationHints, description);
+            addActionableElement(
+                    actionableElements,
+                    description,
+                    clickableBounds,
+                    screenWidth,
+                    screenHeight);
         }
 
         for (int i = 0;
              i < node.getChildCount()
-                     && output.length() < MAX_TEXT_CHARS
                      && visitedNodes[0] < MAX_NODES;
              i++) {
             AccessibilityNodeInfo child = node.getChild(i);
@@ -196,7 +386,10 @@ public class ScreenMonitorService extends AccessibilityService {
                             child,
                             output,
                             navigationHints,
+                            actionableElements,
                             visitedNodes,
+                            screenWidth,
+                            screenHeight,
                             depth + 1);
                 } finally {
                     child.recycle();
@@ -212,6 +405,30 @@ public class ScreenMonitorService extends AccessibilityService {
         String safeLabel = ScreenContext.safeNavigationLabel(value);
         if (safeLabel != null && navigationHints.size() < MAX_NAVIGATION_HINTS) {
             navigationHints.add(safeLabel);
+        }
+    }
+
+    private void addActionableElement(
+            Set<String> actionableElements,
+            CharSequence label,
+            Rect bounds,
+            int screenWidth,
+            int screenHeight
+    ) {
+        if (bounds == null || actionableElements.size() >= MAX_ACTIONABLE_ELEMENTS) {
+            return;
+        }
+        String descriptor = ScreenContext.safeActionDescriptor(
+                label,
+                true,
+                bounds.left,
+                bounds.top,
+                bounds.right,
+                bounds.bottom,
+                screenWidth,
+                screenHeight);
+        if (descriptor != null) {
+            actionableElements.add(descriptor);
         }
     }
 
@@ -272,14 +489,15 @@ public class ScreenMonitorService extends AccessibilityService {
     }
 
     private void enterPayPal() {
-        if (paypalActive) {
-            return;
+        if (!paypalActive) {
+            paypalActive = true;
+            currentCategory = ScreenCategories.UNKNOWN;
+            categoryEventGate.reset();
+            resetCategoryUncertainty();
+            CategoryStore.clear(this);
+            Log.i(TAG, "Official PayPal package became active.");
         }
 
-        paypalActive = true;
-        currentCategory = ScreenCategories.UNKNOWN;
-        categoryEventGate.reset();
-        CategoryStore.clear(this);
         if (overlay != null) {
             overlay.show();
         }
@@ -291,8 +509,10 @@ public class ScreenMonitorService extends AccessibilityService {
         }
 
         paypalActive = false;
+        Log.i(TAG, "Clearing PayPal screen context.");
         currentCategory = ScreenCategories.UNKNOWN;
         categoryEventGate.reset();
+        resetCategoryUncertainty();
         CategoryStore.clear(this);
         if (overlay != null) {
             overlay.hide();
@@ -313,17 +533,22 @@ public class ScreenMonitorService extends AccessibilityService {
         intent.putStringArrayListExtra(
                 ScreenMonitorContract.EXTRA_VISIBLE_LABELS,
                 new ArrayList<>());
+        intent.putStringArrayListExtra(
+                ScreenMonitorContract.EXTRA_ACTIONABLE_ELEMENTS,
+                new ArrayList<>());
         intent.putExtra(ScreenMonitorContract.EXTRA_OBSERVED_AT, 0L);
         sendBroadcast(intent);
     }
 
     @Override
     public void onInterrupt() {
+        Log.w(TAG, "Accessibility service interrupted.");
         leavePayPal();
     }
 
     @Override
     public void onDestroy() {
+        Log.i(TAG, "Accessibility service destroyed.");
         leavePayPal();
         if (overlay != null) {
             overlay.hide();

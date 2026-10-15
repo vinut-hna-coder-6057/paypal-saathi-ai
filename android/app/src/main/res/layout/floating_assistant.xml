@@ -57,6 +57,18 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/floatingAssistantStop"
+                android:layout_width="72dp"
+                android:layout_height="48dp"
+                android:clickable="true"
+                android:contentDescription="@string/floating_assistant_stop"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="@string/floating_assistant_stop"
+                android:textColor="#2457C5"
+                android:textSize="12sp" />
+
+            <TextView
                 android:id="@+id/floatingAssistantMinimize"
                 android:layout_width="48dp"
                 android:layout_height="48dp"

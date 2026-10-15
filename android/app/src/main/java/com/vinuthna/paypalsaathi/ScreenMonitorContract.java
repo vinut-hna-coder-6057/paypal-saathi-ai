@@ -12,5 +12,10 @@ public final class ScreenMonitorContract {
     public static final String EXTRA_CATEGORY_CHANGED = "category_changed";
     public static final String EXTRA_PAYPAL_ACTIVE = "paypal_active";
     public static final String EXTRA_VISIBLE_LABELS = "visible_labels";
+    public static final String EXTRA_ACTIONABLE_ELEMENTS = "actionable_elements";
+    public static final String EXTRA_CONFIDENCE = "confidence";
+    public static final String EXTRA_EVIDENCE_STRENGTH = "evidence_strength";
+    public static final String EXTRA_AMBIGUOUS = "ambiguous";
+    public static final String EXTRA_EVIDENCE_CODES = "evidence_codes";
     public static final String EXTRA_OBSERVED_AT = "observed_at";
 }

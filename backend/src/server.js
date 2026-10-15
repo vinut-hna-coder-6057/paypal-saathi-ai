@@ -1,8 +1,8 @@
 ﻿import { createApp } from './app.js';
+import { getServerConfig } from './serverConfig.js';
 
 const app = createApp();
-const port = Number(process.env.PORT || 3000);
-const host = process.env.HOST || '0.0.0.0';
+const { host, port } = getServerConfig();
 
 const server = app.listen(port, host, () => {
   console.log(`PayPal Saathi API listening on http://${host}:${port}`);

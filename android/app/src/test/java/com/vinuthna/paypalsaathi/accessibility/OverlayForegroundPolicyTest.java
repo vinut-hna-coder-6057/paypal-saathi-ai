@@ -27,4 +27,18 @@ public class OverlayForegroundPolicyTest {
                 OverlayForegroundPolicy.Decision.IGNORE,
                 OverlayForegroundPolicy.decide("com.android.inputmethod", null, PAYPAL, SAATHI));
     }
+
+    @Test
+    public void showsOnExactPayPalEventWhenForegroundWindowIsUnavailable() {
+        assertEquals(
+                OverlayForegroundPolicy.Decision.SHOW,
+                OverlayForegroundPolicy.decide(PAYPAL, null, PAYPAL, SAATHI));
+        assertEquals(
+                OverlayForegroundPolicy.Decision.IGNORE,
+                OverlayForegroundPolicy.decide(
+                        "com.paypal.android.p2pmobile.untrusted",
+                        null,
+                        PAYPAL,
+                        SAATHI));
+    }
 }

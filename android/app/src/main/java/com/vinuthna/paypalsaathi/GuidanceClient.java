@@ -100,6 +100,31 @@ public final class GuidanceClient {
             long observedAt,
             Callback callback
     ) {
+        askQuestion(
+                question,
+                screenCategory,
+                visibleLabels,
+                null,
+                0,
+                "insufficient",
+                true,
+                null,
+                observedAt,
+                callback);
+    }
+
+    public static void askQuestion(
+            String question,
+            String screenCategory,
+            List<String> visibleLabels,
+            List<String> actionableElements,
+            int confidence,
+            String evidenceStrength,
+            boolean ambiguous,
+            List<String> evidenceCodes,
+            long observedAt,
+            Callback callback
+    ) {
         JSONObject body = new JSONObject();
 
         try {
@@ -116,6 +141,27 @@ public final class GuidanceClient {
                     safeLabels.put(label);
                 }
                 screenContext.put("visibleLabels", safeLabels);
+                JSONArray safeActions = new JSONArray();
+                for (String action : ScreenContext.sanitizeActionDescriptors(
+                        actionableElements)) {
+                    safeActions.put(action);
+                }
+                screenContext.put("actionableElements", safeActions);
+                screenContext.put("confidence", Math.max(0, Math.min(
+                        confidence, 100)));
+                screenContext.put(
+                        "evidenceStrength",
+                        "strong".equals(evidenceStrength)
+                                || "moderate".equals(evidenceStrength)
+                                ? evidenceStrength
+                                : "insufficient");
+                screenContext.put("ambiguous", ambiguous);
+                JSONArray safeEvidenceCodes = new JSONArray();
+                for (String code : ScreenContext.sanitizeEvidenceCodes(
+                        evidenceCodes)) {
+                    safeEvidenceCodes.put(code);
+                }
+                screenContext.put("evidenceCodes", safeEvidenceCodes);
                 screenContext.put("source", "accessibility");
                 screenContext.put("observedAt", observedAt);
                 body.put("screenContext", screenContext);

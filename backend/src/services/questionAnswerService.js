@@ -12,6 +12,7 @@ import {
   ModelProviderError
 } from './modelAdapter.js';
 import { sanitizeScreenContext } from './screenContext.js';
+import { selectScreenStep } from './screenAwareGuidance.js';
 import { recordPipelineMetric } from './pipelineMetrics.js';
 
 const DEFAULT_MINIMUM_SIMILARITY = 0.45;
@@ -124,6 +125,14 @@ function screenNavigationGuidance(intent, screenCategory, safeScreenContext) {
   const target = NAVIGATION_TARGETS[intent?.id];
   if (!target) {
     return null;
+  }
+
+  const reliableContext = safeScreenContext
+    && safeScreenContext.confidence >= 75
+    && safeScreenContext.evidenceStrength !== 'insufficient'
+    && !safeScreenContext.ambiguous;
+  if (!reliableContext) {
+    return `I can answer the task from the documentation, but the current screen is uncertain. Which navigation labels do you see?`;
   }
 
   const visibleLabels = new Set(safeScreenContext?.visibleLabels || []);
@@ -296,7 +305,8 @@ export function createQuestionAnswerService({
         category: ruleAnswer.category,
         guidance: SENSITIVE_QUESTION,
         disclaimer: ruleAnswer.disclaimer,
-        matchedBy: 'fallback'
+        matchedBy: 'fallback',
+        nextStep: null
       };
     }
 
@@ -307,7 +317,24 @@ export function createQuestionAnswerService({
         category: ruleAnswer.category,
         guidance: ACCOUNT_ACCESS_LIMITATION,
         disclaimer: ruleAnswer.disclaimer,
-        matchedBy: 'fallback'
+        matchedBy: 'fallback',
+        nextStep: null
+      };
+    }
+
+    const nextStep = selectScreenStep({
+      intent,
+      screenCategory,
+      screenContext: safeScreenContext
+    });
+    if (nextStep) {
+      recordPipelineMetric('fallbacks');
+      return {
+        category: ruleAnswer.category,
+        guidance: nextStep.instruction,
+        disclaimer: ruleAnswer.disclaimer,
+        matchedBy: 'screen_rules',
+        nextStep
       };
     }
 

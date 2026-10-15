@@ -1,6 +1,13 @@
 package com.vinuthna.paypalsaathi.detection;
 
+import com.vinuthna.paypalsaathi.ScreenContext;
+
+import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Rule-based (non-AI) screen classifier.
@@ -12,16 +19,45 @@ public final class ScreenClassifier {
     private ScreenClassifier() {}
 
     public static String classify(String rawText) {
-        if (rawText == null || rawText.trim().isEmpty()) {
-            return ScreenCategories.UNKNOWN;
+        return classify(rawText, null);
+    }
+
+    public static String classify(
+            String rawText,
+            List<String> actionableElements
+    ) {
+        return classifyScreen(
+                rawText,
+                actionableElements,
+                "com.paypal.android.p2pmobile").category();
+    }
+
+    public static ScreenClassification classifyScreen(
+            String rawText,
+            List<String> actionableElements,
+            String sourcePackage
+    ) {
+        if (!"com.paypal.android.p2pmobile".equals(sourcePackage)) {
+            return ScreenClassification.unknown(true, "unrelated_package");
         }
 
-        String text = normalize(rawText);
+        List<String> safeActions =
+                ScreenContext.sanitizeActionDescriptors(actionableElements);
+        String text = normalize(rawText == null ? "" : rawText);
         if (text.isEmpty()) {
-            return ScreenCategories.UNKNOWN;
+            if (hasConfidentHomeActions(safeActions)) {
+                return result(
+                        ScreenCategories.HOME,
+                        82,
+                        "moderate",
+                        false,
+                        Collections.singletonList("home_action_combination"),
+                        safeActions);
+            }
+            return unknown(safeActions, false, "insufficient_accessibility");
         }
 
-        // Most sensitive first — never treat these as payment-success screens.
+        // Authentication and payment-review signals take priority over navigation.
         if (containsAny(text,
                 "verification code",
                 "one-time password",
@@ -33,9 +69,32 @@ public final class ScreenClassifier {
                 "verify your identity",
                 "two-factor authentication",
                 "two-step verification")) {
-            return ScreenCategories.SECURITY;
+            return result(
+                    ScreenCategories.SECURITY,
+                    96,
+                    "strong",
+                    false,
+                    Collections.singletonList("authentication_prompt"),
+                    safeActions);
         }
 
+        if (containsAny(text,
+                "log in",
+                "login",
+                "sign in",
+                "welcome to paypal",
+                "create an account")) {
+            return result(
+                    ScreenCategories.SIGN_IN,
+                    92,
+                    "strong",
+                    false,
+                    Collections.singletonList("sign_in_prompt"),
+                    safeActions);
+        }
+
+        List<String> strongMatches = new ArrayList<>();
+        List<String> strongEvidence = new ArrayList<>();
         if (containsAny(text,
                 "review your payment",
                 "review payment",
@@ -46,7 +105,8 @@ public final class ScreenClassifier {
                 "payment details",
                 "pay now",
                 "complete purchase")) {
-            return ScreenCategories.REVIEW_PAYMENT;
+            strongMatches.add(ScreenCategories.REVIEW_PAYMENT);
+            strongEvidence.add("review_prompt");
         }
 
         if (containsAny(text,
@@ -57,7 +117,8 @@ public final class ScreenClassifier {
                 "payment successful",
                 "transaction successful",
                 "payment received")) {
-            return ScreenCategories.CONFIRMATION;
+            strongMatches.add(ScreenCategories.CONFIRMATION);
+            strongEvidence.add("confirmation_prompt");
         }
 
         if (containsAny(text,
@@ -66,7 +127,8 @@ public final class ScreenClassifier {
                 "how much",
                 "amount to send",
                 "choose amount")) {
-            return ScreenCategories.AMOUNT_ENTRY;
+            strongMatches.add(ScreenCategories.AMOUNT_ENTRY);
+            strongEvidence.add("amount_prompt");
         }
 
         if (containsAny(text,
@@ -76,21 +138,57 @@ public final class ScreenClassifier {
                 "select recipient",
                 "who do you want to pay",
                 "who are you sending money to")) {
-            return ScreenCategories.RECIPIENT_SELECTION;
+            strongMatches.add(ScreenCategories.RECIPIENT_SELECTION);
+            strongEvidence.add("recipient_prompt");
         }
 
-        if (containsAny(text, "send money", "pay someone")) {
-            return ScreenCategories.SEND_MONEY;
+        if (strongMatches.size() > 1) {
+            return unknown(safeActions, true, "conflicting_screen_signals");
+        }
+        if (!strongMatches.isEmpty()) {
+            return result(
+                    strongMatches.get(0),
+                    92,
+                    "strong",
+                    false,
+                    Collections.singletonList(strongEvidence.get(0)),
+                    safeActions);
+        }
+
+        if (hasConfidentHomeActions(safeActions)) {
+            return result(
+                    ScreenCategories.HOME,
+                    82,
+                    "moderate",
+                    false,
+                    Collections.singletonList("home_action_combination"),
+                    safeActions);
+        }
+
+        if (containsAny(text, "send money flow", "send money", "pay someone")) {
+            return result(
+                    ScreenCategories.SEND_MONEY,
+                    78,
+                    "moderate",
+                    false,
+                    Collections.singletonList("send_flow_heading"),
+                    safeActions);
         }
 
         if (containsAny(text,
                 "wallet screen",
                 "banks and cards",
-                "bank account",
                 "payment methods",
-                "linked accounts")
+                "linked accounts",
+                "manage payment methods")
                 || text.equals("wallet")) {
-            return ScreenCategories.WALLET;
+            return result(
+                    ScreenCategories.WALLET,
+                    84,
+                    "moderate",
+                    false,
+                    Collections.singletonList("wallet_heading"),
+                    safeActions);
         }
 
         if (containsAny(text,
@@ -98,16 +196,13 @@ public final class ScreenClassifier {
                 "recent activity",
                 "transaction history")
                 || text.equals("activity")) {
-            return ScreenCategories.ACTIVITY;
-        }
-
-        if (containsAny(text,
-                "log in",
-                "login",
-                "sign in",
-                "welcome to paypal",
-                "create an account")) {
-            return ScreenCategories.SIGN_IN;
+            return result(
+                    ScreenCategories.ACTIVITY,
+                    82,
+                    "moderate",
+                    false,
+                    Collections.singletonList("activity_heading"),
+                    safeActions);
         }
 
         if (containsAny(text,
@@ -116,10 +211,65 @@ public final class ScreenClassifier {
                 "dashboard",
                 "account overview")
                 || text.equals("home")) {
-            return ScreenCategories.HOME;
+            return result(
+                    ScreenCategories.HOME,
+                    84,
+                    "moderate",
+                    false,
+                    Collections.singletonList("home_heading"),
+                    safeActions);
         }
 
-        return ScreenCategories.UNKNOWN;
+        return unknown(safeActions, false, "insufficient_accessibility");
+    }
+
+    private static ScreenClassification result(
+            String category,
+            int confidence,
+            String strength,
+            boolean ambiguous,
+            List<String> evidence,
+            List<String> actions
+    ) {
+        return new ScreenClassification(
+                category,
+                confidence,
+                strength,
+                ambiguous,
+                evidence,
+                actions);
+    }
+
+    private static ScreenClassification unknown(
+            List<String> actions,
+            boolean ambiguous,
+            String evidence
+    ) {
+        return new ScreenClassification(
+                ScreenCategories.UNKNOWN,
+                0,
+                "insufficient",
+                ambiguous,
+                Collections.singletonList(evidence),
+                actions);
+    }
+
+    private static boolean hasConfidentHomeActions(List<String> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return false;
+        }
+
+        Set<String> homeActions = new HashSet<>();
+        for (String element : elements) {
+            String label = ScreenContext.actionLabel(element);
+            if ("Send".equals(label)
+                    || "Request".equals(label)
+                    || "Add card or bank".equals(label)
+                    || "Go to Resolution Centre".equals(label)) {
+                homeActions.add(label);
+            }
+        }
+        return homeActions.size() >= 2;
     }
 
     private static String normalize(String text) {

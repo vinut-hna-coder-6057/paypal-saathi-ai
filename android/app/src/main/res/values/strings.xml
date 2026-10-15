@@ -26,6 +26,7 @@
     <string name="contacting_server">Contacting the local development server.</string>
     <string name="guidance_offline_title">Offline / fallback guidance</string>
     <string name="guidance_error_detail">Server detail: %1$s</string>
+    <string name="guidance_offline_with_error">%1$s\n\n%2$s</string>
     <string name="refresh_guidance">Refresh Guidance</string>
     <string name="retry_guidance">Retry server</string>
     <string name="ask_saathi_heading">Ask Saathi</string>
@@ -45,6 +46,8 @@
     <string name="floating_assistant_open">Open PayPal Saathi assistant</string>
     <string name="floating_assistant_title">PayPal Saathi</string>
     <string name="floating_assistant_minimize">Minimize PayPal Saathi</string>
+    <string name="floating_assistant_stop">Stop</string>
+    <string name="floating_assistant_flow_stopped">Step-by-step guidance stopped. Ask a new question whenever you are ready.</string>
     <string name="floating_assistant_minimize_symbol">−</string>
     <string name="floating_assistant_disclosure">Independent helper; not part of PayPal. Tap the icon to minimize. This panel may cover part of the screen.</string>
     <string name="floating_assistant_unknown">Current screen: Unknown</string>
@@ -56,7 +59,9 @@
     <string name="floating_assistant_question_empty">Type a general question first.</string>
     <string name="floating_assistant_question_sensitive">Please remove credentials, codes, full card numbers, and other sensitive details. Do not share them with Saathi.</string>
     <string name="floating_assistant_context_changed">The screen changed while Saathi was answering. Ask again for the current page.</string>
+    <string name="floating_assistant_context_checking">Saathi is checking the current screen. Guidance is paused; please wait briefly.</string>
+    <string name="floating_assistant_context_last_confirmed">This category is the last confirmed screen. Current-screen guidance is paused while Saathi checks again.</string>
+    <string name="floating_assistant_context_resolved">The current screen has been checked. Saathi can continue with this screen context.</string>
     <string name="floating_assistant_question_error">Could not get an answer. Check your connection and try again.</string>
-    <string name="floating_assistant_question_context">Current screen: %1$s\n\n%2$s</string>
     <string name="floating_assistant_no_paypal_context">PayPal is no longer the active app. Screen context was cleared.</string>
 </resources>

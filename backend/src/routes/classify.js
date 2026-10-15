@@ -70,7 +70,18 @@ classifyRouter.post('/', async (req, res, next) => {
       guidance: result.guidance,
       disclaimer: result.disclaimer,
       matchedBy: result.matchedBy,
-      screenCategory
+      screenCategory,
+      nextStep: result.nextStep ?? null,
+      screenClassification: screenContext
+        ? {
+          category: screenContext.category,
+          confidence: screenContext.confidence,
+          evidenceStrength: screenContext.evidenceStrength,
+          ambiguous: screenContext.ambiguous,
+          evidenceCodes: screenContext.evidenceCodes,
+          actionableElements: screenContext.actionableElements
+        }
+        : null
     });
   } catch (error) {
     return next(error);

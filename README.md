@@ -30,9 +30,20 @@ npm install
 npm start
 ```
 
-Default: `http://0.0.0.0:3000`
+Default: `http://127.0.0.1:3000` (loopback only; for local development).
 
-The question-answer path defaults to local Ollama model `qwen2.5:3b-instruct` and the CPU embedding model `Xenova/all-MiniLM-L6-v2`. On first ingestion, Transformers.js downloads the small quantized embedding model into ignored `backend/data/model-cache/`. Only the question, inferred task intent, and retrieved excerpts are sent to the configured loopback Ollama endpoint; screen category and navigation labels are not sent to the model. When the accessibility service is enabled, the API may receive up to eight short, allow-listed navigation labels to form a cautious possible starting-point hint. No free-form screen text is sent.
+The question-answer path defaults to local Ollama model `qwen2.5:3b-instruct` and the CPU embedding model `Xenova/all-MiniLM-L6-v2`. On first ingestion, Transformers.js downloads the small quantized embedding model into ignored `backend/data/model-cache/`. For general help questions, only the question, inferred task intent, and retrieved excerpts are sent to the configured loopback Ollama endpoint. Screen categories and accessibility metadata are not sent to the model. When accessibility is enabled, the API may receive a canonical screen category, a heuristic confidence/evidence summary, up to eight allow-listed navigation labels, and clickable-control labels with coarse top/middle/bottom and left/center/right positions. Confidence is a rule-based evidence score, not a calibrated probability or proof of screen identity. No free-form screen text, exact bounds, screenshots, or field values are sent.
+
+For the supported “send money” goal, a deterministic screen-step selector uses the current category and only an exact allow-listed clickable “Send” label with coarse position metadata. It returns one instruction and the expected next screen; on screen changes the floating panel repeats the goal with fresh context. Uncertain screens ask for a general description, and security screens pause the flow. This is conservative rule-based assistance, not reliable recognition of every PayPal page. It does not tap controls. Visual button highlighting is not implemented.
+
+The backend has no authentication. Keep the default loopback binding for local development; the Android emulator reaches it through `10.0.2.2`, and a physical phone can use `adb reverse tcp:3000 tcp:3000`. `HOST` accepts an IPv4 or IPv6 address literal. To listen beyond loopback, explicitly set `HOST` to a trusted interface address. `0.0.0.0` listens on every IPv4 interface and `::` listens on every IPv6 interface. Restrict access with a firewall or private network. A LAN or production deployment additionally requires an authenticated access design and HTTPS termination; changing `HOST` does not provide authentication or encryption, and CORS is not authentication.
+
+PowerShell example for an explicitly exposed development backend (use only on a trusted network):
+
+```powershell
+$env:HOST = '0.0.0.0'
+npm start
+```
 
 Check that Ollama is running and the configured answer model is installed:
 
@@ -71,14 +82,16 @@ Check index integrity, compatible embedding counts, last successful ingestion, a
 npm run diagnostics:knowledge
 ```
 
-`POST /api/classify` keeps its existing response shape. `guidance` includes citations to retrieved sources when evidence is sufficient. Weak or missing evidence produces an explicit insufficiency response; Ollama unavailability uses the existing transparent rule-based fallback. Neither user questions nor screen content are stored in the vector database.
+`POST /api/classify` retains its existing fields and adds `nextStep` (or `null`) for the supported screen-aware sending flow, plus `screenClassification` (or `null`) containing the validated canonical category, confidence/evidence metadata, and sanitized actionable descriptors. The backend validates categories and bounds/allow-lists the metadata; because this is client-supplied accessibility data, it does not cryptographically prove what is on screen. The deterministic home rule requires at least two distinct allow-listed clickable controls; specific sending guidance additionally requires fresh, non-ambiguous metadata with confidence of at least 75 and a clickable `Send` descriptor. Weak, conflicting, stale, or missing evidence falls back to asking the user to describe the screen. General `guidance` includes citations to retrieved sources when evidence is sufficient; Ollama unavailability uses the existing transparent rule-based fallback. Neither user questions nor screen content are stored in the vector database.
+
+Classifier test fixtures are synthetic and exercise supported signals; they are not verified accessibility snapshots from every PayPal version. The classifier is English-oriented and depends on what the installed PayPal app exposes to Android accessibility. Validate recognition and control positions on the actual device before relying on screen-specific guidance.
 
 Optional env (see `backend/.env.example`; export in your shell — no dotenv loader):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `3000` | Listen port |
-| `HOST` | `0.0.0.0` | Bind address |
+| `HOST` | `127.0.0.1` | IPv4/IPv6 bind address; set explicitly to expose beyond loopback |
 | `CORS_ORIGINS` | `http://localhost:3000` | Allowed browser origins |
 | `RATE_LIMIT_PER_MINUTE` | `60` | Per-IP limit |
 | `PAYPAL_LLM_MODEL` | `qwen2.5:3b-instruct` | Installed local Ollama answer model |
@@ -99,9 +112,9 @@ npm run dev
 
 | Method | Path | Body | Success |
 |--------|------|------|---------|
-| `GET` | `/health` | — | `{ status, service, version, classifier, modelIntegrated, pipelineMetrics, supportedScreenCategories }` |
+| `GET` | `/health` | — | Liveness only: `{ status, service, version, classifier, modelIntegrated, pipelineMetrics, supportedScreenCategories }`; does not confirm AI or database readiness |
 | `POST` | `/api/guidance` | `{ "screenCategory": "review_payment" }` | `{ category, title, steps, matchedBy, safetyNote }` |
-| `POST` | `/api/classify` | `{ "question": "How do I send money?", "screenCategory": "wallet" }` (optional recent `screenContext` contains only allow-listed navigation labels) | `{ category, guidance, disclaimer, matchedBy, screenCategory }` |
+| `POST` | `/api/classify` | `{ "question": "How do I send money?", "screenCategory": "home" }` (optional recent context contains allow-listed labels and coarse positions of clickable controls) | `{ category, guidance, disclaimer, matchedBy, screenCategory, nextStep }` |
 
 Errors return `{ "error": "..." }` with `400` / `403` / `404` / `413` / `500`. Stack traces are never returned.
 
@@ -133,20 +146,30 @@ adb install -r app\build\outputs\apk\debug\app-debug.apk
 
 Debug `API_BASE_URL` is `http://10.0.2.2:3000` (emulator → host loopback).
 
-1. Start the backend on the host at port **3000**.
-2. Launch the app on an emulator.
-3. Confirm **Backend: connected** on the home screen.
+1. Start the backend on the host at port **3000** (default loopback binding).
+2. Build with `.\gradlew.bat assembleDebug -PAPI_BASE_URL=http://10.0.2.2:3000` (or use the same default URL).
+3. Install `app\build\outputs\apk\debug\app-debug.apk` and launch it on the emulator.
+4. Confirm **Backend: connected** on the home screen.
 
 ### Physical device + `adb reverse`
 
-```bash
-adb reverse tcp:3000 tcp:3000
-cd android
-.\gradlew.bat assembleDiagnosticDebug
-adb install -r app\build\outputs\apk\diagnosticDebug\app-diagnosticDebug.apk
+Start the backend on the development computer in one terminal:
+
+```powershell
+Set-Location backend
+npm start
 ```
 
-The diagnostic build sets `BuildConfig.API_BASE_URL` to `http://127.0.0.1:3000` and excludes the accessibility service. The `adb reverse` mapping sends that loopback traffic to the host backend. The default debug build remains configured for the Android emulator at `http://10.0.2.2:3000`; for a physical-device debug build, override it with `-PAPI_BASE_URL=http://127.0.0.1:3000`.
+In a second PowerShell terminal, connect the device and build/install a regular debug APK with the physical-phone loopback URL:
+
+```powershell
+adb reverse tcp:3000 tcp:3000
+Set-Location android
+.\gradlew.bat assembleDebug -PAPI_BASE_URL=http://127.0.0.1:3000
+adb install -r app\build\outputs\apk\debug\app-debug.apk
+```
+
+The `adb reverse` mapping forwards the phone's `127.0.0.1:3000` to the host backend. This regular debug build retains the accessibility service. The diagnostic build is a separate option that excludes the accessibility service. The URL override is applied only to that build invocation; omit it to restore the emulator default `http://10.0.2.2:3000`.
 
 Cleartext HTTP is allowed only for `10.0.2.2`, `127.0.0.1`, `localhost`, and Genymotion `10.0.3.2`. Production/release should use HTTPS via `-PRELEASE_API_BASE_URL=https://your.host`.
 

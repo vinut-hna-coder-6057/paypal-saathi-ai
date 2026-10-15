@@ -2,7 +2,8 @@ plugins {
     id 'com.android.application'
 }
 
-def apiBaseUrl = project.findProperty('API_BASE_URL') ?: 'http://127.0.0.1:3000'
+// Emulator is the default; override API_BASE_URL for a phone using adb reverse.
+def apiBaseUrl = project.findProperty('API_BASE_URL') ?: 'http://10.0.2.2:3000'
 def releaseApiBaseUrl = project.findProperty('RELEASE_API_BASE_URL') ?: 'https://api.example.com'
 def releaseSigning = [
     storeFile: providers.environmentVariable('PAYPAL_SAATHI_RELEASE_STORE_FILE').orNull,
@@ -69,6 +70,7 @@ android {
 }
 
 dependencies {
+    implementation 'androidx.core:core:1.15.0'
     testImplementation 'junit:junit:4.13.2'
 }
 
