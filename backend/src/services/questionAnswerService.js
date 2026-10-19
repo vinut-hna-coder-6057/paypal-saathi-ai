@@ -35,7 +35,8 @@ const LONG_NUMBER = /(?<!\d)(?:\d[ -]?){13,19}(?!\d)/;
 const CODE_VALUE = /\b(otp|verification code|security code|cvv|cvc|pin)\b\s*(?:is\s+|[:=]\s*)?\d{3,8}\b/i;
 const EMAIL_ADDRESS = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE_NUMBER = /(?:\+?\d[\d ()-]{8,}\d)/;
-const SENSITIVE_AMOUNT = /\b(amount|balance|payment amount|transfer amount)\b\s*(?:is\s+|[:=]\s*)?(?:₹|INR|USD|EUR|GBP)?\s*\d[\d,.]*/i;
+const SENSITIVE_AMOUNT =
+  /(?:\b(?:amount|balance|payment amount|transfer amount)\b\s*(?:is\s+|[:=]\s*)?(?:₹|INR|USD|EUR|GBP)?\s*\d[\d,.]*|(?:₹|INR|USD|EUR|GBP|Rs\.?|रु\.?|\$|€|£)\s*\d[\d,.]*)/i;
 const SENSITIVE_IDENTIFIER = /\b(account|transaction|reference|recipient)\s*(?:id|number|details?)\s*(?:is\s+|[:=]\s*)\S+/i;
 const PRIVATE_ACCOUNT_LOOKUP = /\b(?:what(?:'s| is)|show(?: me)?|tell me|check|verify|confirm)\s+(?:my|the)\s+(?:current )?(?:balance|payment status|transaction status|account details|recipient details)\b|\b(?:did|has)\s+my\s+(?:payment|transaction)\s+(?:go through|succeed|complete)\b/i;
 const NAVIGATION_TARGETS = {

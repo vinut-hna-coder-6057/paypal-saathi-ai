@@ -436,7 +436,48 @@ test('questions containing account identifiers and financial amounts bypass retr
     assert.equal(result.matchedBy, 'fallback');
   }
 });
+test('questions containing currency amounts bypass retrieval and generation', async () => {
+  const sensitiveQuestions = [
+    'I sent ₹500 to my friend. How do I check it?',
+    'I transferred INR 2,500 to my friend. Where can I see it?',
+    'I paid $25.50. How do I check the payment status?'
+  ];
 
+  for (const question of sensitiveQuestions) {
+    let retrievalCalled = false;
+    let generationCalled = false;
+
+    const answer = createQuestionAnswerService({
+      retrieve: async () => {
+        retrievalCalled = true;
+        return syntheticEvidence;
+      },
+      generate: async () => {
+        generationCalled = true;
+        return 'Synthetic answer [1].';
+      }
+    });
+
+    const result = await answer({
+      question,
+      screenCategory: 'unknown'
+    });
+
+    assert.equal(
+      retrievalCalled,
+      false,
+      `Retrieval must not run for: ${question}`
+    );
+
+    assert.equal(
+      generationCalled,
+      false,
+      `Generation must not run for: ${question}`
+    );
+
+    assert.equal(result.matchedBy, 'fallback');
+  }
+});
 test('direct private-account lookup does not invoke retrieval or generation', async () => {
   let retrievalCalled = false;
   const answer = createQuestionAnswerService({

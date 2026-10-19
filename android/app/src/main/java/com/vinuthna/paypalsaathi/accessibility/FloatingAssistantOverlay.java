@@ -361,6 +361,11 @@ final class FloatingAssistantOverlay {
     }
 
     private void requestAnswer(String question) {
+        if (QuestionInputValidator.containsLikelySensitiveValue(question)) {
+    setQuestionLoading(false);
+    setAnswer(R.string.floating_assistant_question_sensitive);
+    return;
+}
         QuestionRequestTracker.Request request = requestTracker.begin(question);
         if (request == null) {
             return;

@@ -19,10 +19,14 @@ public final class QuestionInputValidator {
             Pattern.CASE_INSENSITIVE);
     private static final Pattern PHONE_NUMBER = Pattern.compile(
             "(?:\\+?\\d[\\d ()-]{8,}\\d)");
-    private static final Pattern SENSITIVE_AMOUNT = Pattern.compile(
-            "\\b(amount|balance|payment amount|transfer amount)\\b"
-                    + "\\s*(is\\s+|[:=]\\s*)?(?:₹|INR|USD|EUR|GBP)?\\s*\\d[\\d,.]*",
-            Pattern.CASE_INSENSITIVE);
+ private static final Pattern SENSITIVE_AMOUNT = Pattern.compile(
+        "(?:\\b(amount|balance|payment amount|transfer amount)\\b"
+                + "\\s*(?:is\\s+|[:=]\\s*)?"
+                + "(?:INR|USD|EUR|GBP|Rs\\.?|Rupees?|\\$|"
+                + "\\x{20B9}|\\x{20AC}|\\x{00A3})?\\s*\\d[\\d,.]*"
+                + "|(?:INR|USD|EUR|GBP|Rs\\.?|Rupees?|\\$|"
+                + "\\x{20B9}|\\x{20AC}|\\x{00A3})\\s*\\d[\\d,.]*)",
+        Pattern.CASE_INSENSITIVE);
     private static final Pattern SENSITIVE_IDENTIFIER = Pattern.compile(
             "\\b(account|transaction|reference|recipient)\\s*"
                     + "(id|number|details?)\\s*(is\\s+|[:=]\\s*)\\S+",
