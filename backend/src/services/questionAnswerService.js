@@ -151,24 +151,45 @@ function screenNavigationGuidance(intent, screenCategory, safeScreenContext) {
   return `I can answer the task from the documentation, but I cannot confirm the next in-app control from the current ${screenCategory} screen. Which navigation labels do you see?`;
 }
 
-async function retrieveRelevantEvidence(question, intent) {
+async function retrieveRelevantEvidence(question, intent, signal) {
+  const throwIfCancelled = () => {
+    if (signal?.aborted) {
+      const error = new Error('Question request was cancelled.');
+      error.code = 'REQUEST_CANCELLED';
+      throw error;
+    }
+  };
+
+  throwIfCancelled();
+
   try {
     const store = getKnowledgeStore();
     const embeddingModel = getEmbeddingModelName();
+
     if (!store.embeddingCompatibility(embeddingModel).compatible) {
       throw new Error(
         'Knowledge index embeddings do not match the configured model.'
       );
     }
+
     if (store.countChunks(embeddingModel) === 0) {
       return [];
     }
+
     const retrievalText = intent
       ? `${question}\n${intent.retrievalTerms}`
       : question;
+
     const queryVector = await embedText(retrievalText);
+
+    throwIfCancelled();
+
     return store.search(queryVector, 12, embeddingModel, retrievalText);
   } catch (error) {
+    if (error?.code === 'REQUEST_CANCELLED') {
+      throw error;
+    }
+
     throw new RetrievalUnavailableError(error);
   }
 }
@@ -291,9 +312,19 @@ export function createQuestionAnswerService({
     screenContext,
     signal
   }) {
-    const requestStartedAt = Date.now();
-    try {
-    const ruleAnswer = classify(question, screenCategory);
+    
+const requestStartedAt = Date.now();
+
+try {
+  if (signal?.aborted) {
+    throw new ModelProviderError(
+      'Question request was cancelled.',
+      'REQUEST_CANCELLED'
+    );
+  }
+
+  const ruleAnswer = classify(question, screenCategory);
+
     const intent = inferQuestionIntent(question);
     const safeScreenContext = sanitizeScreenContext(
       screenContext,
@@ -342,7 +373,12 @@ export function createQuestionAnswerService({
     let evidence;
     const retrievalStartedAt = Date.now();
     try {
-      evidence = await retrieve(question, intent);
+      evidence = await retrieve(question, intent, signal);
+      if (signal?.aborted) {
+  const error = new Error('Question request was cancelled.');
+  error.code = 'REQUEST_CANCELLED';
+  throw error;
+}
       recordPipelineMetric(
         'retrievals',
         Date.now() - retrievalStartedAt
@@ -421,10 +457,18 @@ export function createQuestionAnswerService({
         disclaimer: SUCCESS_DISCLAIMER,
         matchedBy: 'model'
       };
+   
     } catch (error) {
+      if (error?.code === 'REQUEST_CANCELLED' || signal?.aborted) {
+        const cancelledError = new Error('Question request was cancelled.');
+        cancelledError.code = 'REQUEST_CANCELLED';
+        throw cancelledError;
+      }
+
       if (!(error instanceof ModelProviderError)) {
         throw error;
       }
+
       recordPipelineMetric('modelFailures');
       if (error.code === 'MODEL_TIMEOUT') {
         recordPipelineMetric('modelTimeouts');
@@ -438,6 +482,7 @@ export function createQuestionAnswerService({
         matchedBy: 'rules'
       };
     }
+
     } finally {
       recordPipelineMetric('requests', Date.now() - requestStartedAt);
     }

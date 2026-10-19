@@ -549,3 +549,128 @@ test('keeps a cited partial answer when the exact app path is unsupported', asyn
   assert.match(result.guidance, /However, they show how to view transaction reports/i);
   assert.match(result.guidance, /does not confirm the same navigation path in the Android app/i);
 });
+
+test('does not start retrieval when the request is already cancelled', async () => {
+  const controller = new AbortController();
+  controller.abort();
+
+  let retrievalCalled = false;
+  let generationCalled = false;
+
+  const answer = createQuestionAnswerService({
+    retrieve: async () => {
+      retrievalCalled = true;
+      return syntheticEvidence;
+    },
+    generate: async () => {
+      generationCalled = true;
+      return 'Synthetic answer [1].';
+    }
+  });
+
+  await assert.rejects(
+    answer({
+      question: 'Where can I view transaction history?',
+      screenCategory: 'activity',
+      signal: controller.signal
+    }),
+    error => error.code === 'REQUEST_CANCELLED'
+  );
+
+  assert.equal(retrievalCalled, false);
+  assert.equal(generationCalled, false);
+});
+
+test('does not search the vector store after embedding finishes on a cancelled request', async () => {
+  const controller = new AbortController();
+  let searchCalled = false;
+
+  const answer = createQuestionAnswerService({
+    retrieve: async (_question, _intent, signal) => {
+      controller.abort();
+
+      if (signal.aborted) {
+        const error = new Error('Question request was cancelled.');
+        error.code = 'REQUEST_CANCELLED';
+        throw error;
+      }
+
+      searchCalled = true;
+      return syntheticEvidence;
+    },
+    generate: async () => {
+      assert.fail('Generation must not run after cancellation.');
+    }
+  });
+
+  await assert.rejects(
+    answer({
+      question: 'Where can I view transaction history?',
+      screenCategory: 'activity',
+      signal: controller.signal
+    }),
+    error => error.code === 'REQUEST_CANCELLED'
+  );
+
+  assert.equal(searchCalled, false);
+});
+
+test('does not generate an answer after cancellation during retrieval', async () => {
+  const controller = new AbortController();
+  let generationCalled = false;
+
+  const answer = createQuestionAnswerService({
+    retrieve: async () => {
+      controller.abort();
+      const error = new Error('Question request was cancelled.');
+      error.code = 'REQUEST_CANCELLED';
+      throw error;
+    },
+    generate: async () => {
+      generationCalled = true;
+      return 'Synthetic answer [1].';
+    }
+  });
+
+  await assert.rejects(
+    answer({
+      question: 'Where can I view transaction history?',
+      screenCategory: 'activity',
+      signal: controller.signal
+    }),
+    error => error.code === 'REQUEST_CANCELLED'
+  );
+
+  assert.equal(generationCalled, false);
+});
+
+test('propagates cancellation during generation without returning fallback guidance', async () => {
+  const controller = new AbortController();
+  let generationCalled = false;
+
+  const answer = createQuestionAnswerService({
+    retrieve: async () => syntheticEvidence,
+    generate: async () => {
+      generationCalled = true;
+      controller.abort();
+
+      const error = new ModelProviderError(
+        'Question request was cancelled.',
+        'REQUEST_CANCELLED'
+      );
+      throw error;
+    }
+  });
+
+  await assert.rejects(
+    answer({
+      question: 'Where can I view transaction history?',
+      screenCategory: 'activity',
+      signal: controller.signal
+    }),
+    error => error.code === 'REQUEST_CANCELLED'
+  );
+
+  assert.equal(generationCalled, true);
+});
+
