@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createApp } from '../src/app.js';
-
+import { createClassifyRouter } from '../src/routes/classify.js';
+import express from 'express';
+import { errorHandler } from '../src/middleware/errors.js';
 process.env.PAYPAL_KB_DB_PATH = ':memory:';
 
 function listen(app) {
@@ -85,6 +87,44 @@ test('POST /api/guidance accepts canonical categories', async () => {
     server.close();
   }
 });
+
+test('unexpected server errors return a generic response without internal details', async () => {
+  const app = express();
+
+  app.get('/test-error', (_req, _res, next) => {
+    const error = new Error(
+      'sensitive internal database path C:\\internal\\secret.js'
+    );
+    next(error);
+  });
+
+  app.use((error, _req, res, _next) => {
+    // Use the actual production error handler.
+    return errorHandler(error, _req, res, _next);
+  });
+
+  const { server, port } = await listen(app);
+
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/test-error`
+    );
+    const text = await response.text();
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(JSON.parse(text), {
+      error: 'Internal server error'
+    });
+    assert.doesNotMatch(
+      text,
+      /sensitive internal database path|secret\.js|stack/i
+    );
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 
 test('POST /api/guidance rejects empty screenCategory', async () => {
   const app = createApp();
@@ -346,6 +386,68 @@ test('POST /api/classify keeps sensitive question text out of its response', asy
     server.close();
   }
 });
+
+test('POST /api/classify aborts the service when the client disconnects', async () => {
+  const app = express();
+  app.use(express.json());
+
+  let receivedSignal;
+  let markStarted;
+
+  const started = new Promise(resolve => {
+    markStarted = resolve;
+  });
+
+  const appRouter = createClassifyRouter(async ({ signal }) => {
+    receivedSignal = signal;
+    markStarted();
+
+    return new Promise(() => {
+      signal.addEventListener('abort', () => {
+        // The request should be cancelled when the client disconnects.
+      }, { once: true });
+    });
+  });
+
+  app.use('/api/classify', appRouter);
+
+  const { server, port } = await listen(app);
+  const controller = new AbortController();
+
+  try {
+    const pendingRequest = fetch(
+      `http://127.0.0.1:${port}/api/classify`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: 'How do I send money?'
+        }),
+        signal: controller.signal
+      }
+    ).catch(() => null);
+
+    await started;
+
+    controller.abort();
+
+    await pendingRequest;
+
+    // Allow the server to process the connection close event.
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    assert.ok(receivedSignal, 'the service should receive an AbortSignal');
+    assert.equal(
+      receivedSignal.aborted,
+      true,
+      'the service signal should be aborted after disconnect'
+    );
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 
 test('unknown routes return 404 JSON', async () => {
   const app = createApp();

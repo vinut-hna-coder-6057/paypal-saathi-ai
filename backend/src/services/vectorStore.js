@@ -358,13 +358,26 @@ export function createVectorStore(databasePath = defaultDatabasePath) {
   };
 }
 
+
 let defaultStore;
 
 export function getKnowledgeStore() {
   if (!defaultStore) {
-    const configuredPath = process.env.PAYPAL_KB_DB_PATH || defaultDatabasePath;
+    const configuredPath =
+      process.env.PAYPAL_KB_DB_PATH || defaultDatabasePath;
     defaultStore = createVectorStore(configuredPath);
   }
 
   return defaultStore;
 }
+
+export function closeKnowledgeStore() {
+  if (!defaultStore) {
+    return;
+  }
+
+  const store = defaultStore;
+  defaultStore = undefined;
+  store.close();
+}
+

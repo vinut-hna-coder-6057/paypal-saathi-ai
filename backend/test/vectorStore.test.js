@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createVectorStore } from '../src/services/vectorStore.js';
-
+import {
+  createVectorStore,
+  closeKnowledgeStore,
+  getKnowledgeStore
+} from '../src/services/vectorStore.js';
 test('SQLite vector store persists metadata, ranks vectors, and upserts idempotently', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'paypal-kb-'));
   const databasePath = path.join(directory, 'knowledge.sqlite');
@@ -152,3 +155,8 @@ test('search suppresses duplicate chunk content within a document', () => {
     store.close();
   }
 });
+
+test('closing an uninitialized knowledge store is safe', () => {
+  assert.doesNotThrow(() => closeKnowledgeStore());
+});
+
