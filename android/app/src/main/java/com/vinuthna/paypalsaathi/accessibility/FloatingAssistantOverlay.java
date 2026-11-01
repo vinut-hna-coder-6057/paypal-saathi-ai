@@ -18,7 +18,12 @@ import com.vinuthna.paypalsaathi.GuidanceClient;
 import com.vinuthna.paypalsaathi.QuestionInputValidator;
 import com.vinuthna.paypalsaathi.QuestionRequestTracker;
 import com.vinuthna.paypalsaathi.R;
+import com.vinuthna.paypalsaathi.ScreenContext;
 import com.vinuthna.paypalsaathi.detection.ScreenCategories;
+import com.vinuthna.paypalsaathi.detection.ScreenElement;
+import com.vinuthna.paypalsaathi.tasks.SafeActionPolicy;
+import com.vinuthna.paypalsaathi.tasks.TaskState;
+import com.vinuthna.paypalsaathi.tasks.TaskStep;
 
 import org.json.JSONObject;
 
@@ -26,6 +31,16 @@ import java.util.Collections;
 import java.util.List;
 
 final class FloatingAssistantOverlay {
+    interface TaskInteractionListener {
+        boolean onGoalSubmitted(String request);
+        void onPauseTask();
+        void onResumeTask();
+        void onCancelTask();
+        void onConfirmTaskComplete();
+        void onExecuteSafeAction();
+        void onRepeatTask();
+    }
+
     private static final String TAG = "SaathiOverlay";
     private static final int MAX_PANEL_HEIGHT_DP = 520;
 
@@ -34,16 +49,22 @@ final class FloatingAssistantOverlay {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final QuestionRequestTracker requestTracker =
             new QuestionRequestTracker();
+    private final TaskInteractionListener taskListener;
 
     private View root;
     private boolean visible;
     private boolean expanded;
     private boolean screenContextPending;
-    private String activeGoal;
-    private Runnable pendingGoalUpdate;
+    private TaskState taskState;
+    private TaskStep taskStep;
+    private String taskMessage;
 
-    FloatingAssistantOverlay(AccessibilityService service) {
+    FloatingAssistantOverlay(
+            AccessibilityService service,
+            TaskInteractionListener taskListener
+    ) {
         this.service = service;
+        this.taskListener = taskListener;
         windowManager = (WindowManager) service.getSystemService(
                 AccessibilityService.WINDOW_SERVICE);
     }
@@ -70,6 +91,26 @@ final class FloatingAssistantOverlay {
                 .setOnClickListener(view -> minimize());
         root.findViewById(R.id.floatingAssistantStop)
                 .setOnClickListener(view -> stopGuidance());
+        root.findViewById(R.id.floatingAssistantRepeat)
+                .setOnClickListener(view -> {
+                    if (taskListener != null) {
+                        taskListener.onRepeatTask();
+                    }
+                });
+        root.findViewById(R.id.floatingAssistantPause)
+                .setOnClickListener(view -> toggleTaskPause());
+        root.findViewById(R.id.floatingAssistantDone)
+                .setOnClickListener(view -> {
+                    if (taskListener != null) {
+                        taskListener.onConfirmTaskComplete();
+                    }
+                });
+        root.findViewById(R.id.floatingAssistantOpenStep)
+                .setOnClickListener(view -> {
+                    if (taskListener != null) {
+                        taskListener.onExecuteSafeAction();
+                    }
+                });
         root.findViewById(R.id.floatingAssistantSend)
                 .setOnClickListener(view -> submitQuestion());
         root.findViewById(R.id.floatingAssistantRetry)
@@ -107,8 +148,6 @@ final class FloatingAssistantOverlay {
         screenContextPending = false;
         requestTracker.invalidate();
         requestTracker.updateScreenCategory(ScreenCategories.UNKNOWN);
-        activeGoal = null;
-        cancelPendingGoalUpdate();
 
         if (root == null) {
             return;
@@ -162,16 +201,15 @@ final class FloatingAssistantOverlay {
                     : R.string.floating_assistant_context_resolved);
         }
         if ((changed || wasPending) && expanded && root != null) {
-            boolean continueGoal = activeGoal != null;
             setQuestionLoading(false);
-            if (!wasPending) {
-                setAnswer(R.string.floating_assistant_context_changed);
+            if (taskState == null || taskState.goal() == null) {
+                if (!wasPending) {
+                    setAnswer(R.string.floating_assistant_context_changed);
+                }
             }
             root.findViewById(R.id.floatingAssistantRetry)
                     .setVisibility(View.GONE);
-            if (continueGoal) {
-                scheduleGoalUpdate();
-            }
+            renderTask();
         }
     }
 
@@ -211,6 +249,123 @@ final class FloatingAssistantOverlay {
         }
         ((TextView) root.findViewById(R.id.floatingAssistantContext))
                 .setText(explanation);
+    }
+
+    void updateTask(TaskState state, TaskStep step, String message) {
+        taskState = state;
+        taskStep = step;
+        taskMessage = message;
+        renderTask();
+    }
+
+    private void renderTask() {
+        if (root == null) {
+            return;
+        }
+        boolean hasTask = taskState != null && taskState.goal() != null;
+        TextView taskTitle = root.findViewById(R.id.floatingAssistantTask);
+        TextView progress = root.findViewById(R.id.floatingAssistantTaskProgress);
+        View repeat = root.findViewById(R.id.floatingAssistantRepeat);
+        View pause = root.findViewById(R.id.floatingAssistantPause);
+        View done = root.findViewById(R.id.floatingAssistantDone);
+        View openStep = root.findViewById(R.id.floatingAssistantOpenStep);
+        if (!hasTask) {
+            taskTitle.setVisibility(View.GONE);
+            progress.setVisibility(View.GONE);
+            repeat.setVisibility(View.GONE);
+            pause.setVisibility(View.GONE);
+            done.setVisibility(View.GONE);
+            openStep.setVisibility(View.GONE);
+            if (taskMessage != null && !taskMessage.trim().isEmpty()) {
+                ((TextView) root.findViewById(R.id.floatingAssistantAnswer))
+                        .setText(taskMessage);
+                root.findViewById(R.id.floatingAssistantRetry)
+                        .setVisibility(View.GONE);
+            }
+            return;
+        }
+
+        taskTitle.setVisibility(View.VISIBLE);
+        taskTitle.setText(service.getString(
+                R.string.floating_assistant_task_title,
+                taskState.goal().displayName()));
+        progress.setVisibility(View.VISIBLE);
+        String progressText;
+        switch (taskState.status()) {
+            case PAUSED:
+                progressText = service.getString(
+                        R.string.floating_assistant_task_paused);
+                break;
+            case COMPLETED:
+                progressText = service.getString(
+                        R.string.floating_assistant_task_completed);
+                break;
+            case CANCELLED:
+                progressText = service.getString(
+                        R.string.floating_assistant_task_cancelled);
+                break;
+            case NEEDS_CLARIFICATION:
+                progressText = service.getString(
+                        R.string.floating_assistant_task_clarification);
+                break;
+            default:
+                progressText = service.getString(
+                        R.string.floating_assistant_task_progress,
+                        taskState.completedStepIds().size() + 1,
+                        taskStep == null ? "" : taskStep.description());
+                break;
+        }
+        progress.setText(progressText);
+
+        boolean terminal = taskState.status() == TaskState.Status.COMPLETED
+                || taskState.status() == TaskState.Status.CANCELLED
+                || taskState.status() == TaskState.Status.FAILED;
+        repeat.setVisibility(terminal ? View.GONE : View.VISIBLE);
+        boolean safeNavigation = taskState.status() == TaskState.Status.WAITING_FOR_USER
+                && taskStep != null
+                && taskStep.riskCategory()
+                    == ScreenElement.RiskCategory.SAFE_NAVIGATION
+                && taskStep.recommendedAction() != null
+                && SafeActionPolicy.isActionAllowed(
+                        ScreenContext.actionLabel(
+                                taskStep.recommendedAction()),
+                        taskStep.currentScreenCategory());
+        openStep.setVisibility(safeNavigation ? View.VISIBLE : View.GONE);
+        if (safeNavigation) {
+            String label = ScreenContext.actionLabel(
+                    taskStep.recommendedAction());
+            ((TextView) openStep).setText(service.getString(
+                    R.string.floating_assistant_open_step,
+                    label == null ? "" : label));
+        }
+        pause.setVisibility(terminal ? View.GONE : View.VISIBLE);
+        ((TextView) pause).setText(
+                taskState.status() == TaskState.Status.PAUSED
+                        ? R.string.floating_assistant_resume_task
+                        : R.string.floating_assistant_pause_task);
+        done.setVisibility(
+                taskState.status() == TaskState.Status.WAITING_FOR_USER
+                        && taskStep != null
+                        && taskStep.expectedNextScreen() == null
+                        ? View.VISIBLE : View.GONE);
+        if (taskMessage != null && !taskMessage.trim().isEmpty()) {
+            ((TextView) root.findViewById(R.id.floatingAssistantAnswer))
+                    .setText(taskMessage);
+            root.findViewById(R.id.floatingAssistantRetry)
+                    .setVisibility(View.GONE);
+        }
+    }
+
+    private void toggleTaskPause() {
+        if (taskListener == null || taskState == null
+                || taskState.goal() == null) {
+            return;
+        }
+        if (taskState.status() == TaskState.Status.PAUSED) {
+            taskListener.onResumeTask();
+        } else {
+            taskListener.onPauseTask();
+        }
     }
 
     private WindowManager.LayoutParams createLayoutParams(boolean panel) {
@@ -256,9 +411,7 @@ final class FloatingAssistantOverlay {
                 .setVisibility(View.VISIBLE);
         windowManager.updateViewLayout(root, createLayoutParams(true));
         renderCategory();
-        if (activeGoal != null) {
-            scheduleGoalUpdate();
-        }
+        renderTask();
     }
 
     private void minimize() {
@@ -356,7 +509,10 @@ final class FloatingAssistantOverlay {
             return;
         }
 
-        activeGoal = question;
+        if (taskListener != null && taskListener.onGoalSubmitted(question)) {
+            input.setText("");
+            return;
+        }
         requestAnswer(question);
     }
 
@@ -429,11 +585,6 @@ final class FloatingAssistantOverlay {
                 .setText(text.toString());
         root.findViewById(R.id.floatingAssistantRetry)
                 .setVisibility(View.GONE);
-        JSONObject nextStep = response.optJSONObject("nextStep");
-        if (nextStep == null
-                || !"awaiting_user".equals(nextStep.optString("status"))) {
-            activeGoal = null;
-        }
     }
 
     private void showError(QuestionRequestTracker.Request request) {
@@ -452,31 +603,20 @@ final class FloatingAssistantOverlay {
     }
 
     private void stopGuidance() {
-        activeGoal = null;
-        cancelPendingGoalUpdate();
         requestTracker.invalidate();
         setQuestionLoading(false);
-        setAnswer(R.string.floating_assistant_flow_stopped);
+        if (taskListener != null
+                && taskState != null
+                && taskState.goal() != null
+                && taskState.status() != TaskState.Status.COMPLETED
+                && taskState.status() != TaskState.Status.CANCELLED
+                && taskState.status() != TaskState.Status.FAILED) {
+            taskListener.onCancelTask();
+        } else {
+            setAnswer(R.string.floating_assistant_flow_stopped);
+        }
         root.findViewById(R.id.floatingAssistantRetry)
                 .setVisibility(View.GONE);
-    }
-
-    private void scheduleGoalUpdate() {
-        cancelPendingGoalUpdate();
-        pendingGoalUpdate = () -> {
-            pendingGoalUpdate = null;
-            if (activeGoal != null && expanded && root != null && visible) {
-                requestAnswer(activeGoal);
-            }
-        };
-        mainHandler.postDelayed(pendingGoalUpdate, 400L);
-    }
-
-    private void cancelPendingGoalUpdate() {
-        if (pendingGoalUpdate != null) {
-            mainHandler.removeCallbacks(pendingGoalUpdate);
-            pendingGoalUpdate = null;
-        }
     }
 
     private void setQuestionLoading(boolean loading) {
@@ -500,10 +640,16 @@ final class FloatingAssistantOverlay {
         }
         screenContextPending = true;
         requestTracker.invalidateRequests();
-        cancelPendingGoalUpdate();
         setQuestionLoading(false);
         renderCategory();
         setAnswer(R.string.floating_assistant_context_checking);
+        if (root != null
+                && taskState != null
+                && taskState.goal() != null
+                && taskState.status() != TaskState.Status.PAUSED) {
+            ((TextView) root.findViewById(R.id.floatingAssistantAnswer))
+                    .setText(R.string.floating_assistant_context_checking);
+        }
         if (root != null) {
             root.findViewById(R.id.floatingAssistantRetry)
                     .setVisibility(View.GONE);

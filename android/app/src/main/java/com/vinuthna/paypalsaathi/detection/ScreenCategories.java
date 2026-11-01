@@ -13,8 +13,11 @@ public final class ScreenCategories {
     public static final String CONFIRMATION = "confirmation";
     public static final String ACTIVITY = "activity";
     public static final String WALLET = "wallet";
+    public static final String ACCOUNT_SETTINGS = "account_settings";
     public static final String SECURITY = "security";
     public static final String SIGN_IN = "sign_in";
+    public static final String ERROR = "error";
+    public static final String LOADING = "loading";
     public static final String UNKNOWN = "unknown";
 
     private ScreenCategories() {}
@@ -41,10 +44,16 @@ public final class ScreenCategories {
                 return "Activity";
             case WALLET:
                 return "Wallet";
+            case ACCOUNT_SETTINGS:
+                return "Account settings";
             case SECURITY:
                 return "Security / verification";
             case SIGN_IN:
                 return "Sign-in";
+            case ERROR:
+                return "Error";
+            case LOADING:
+                return "Loading";
             case UNKNOWN:
             default:
                 return "Unknown / unclassified";
@@ -65,12 +74,23 @@ public final class ScreenCategories {
             case CONFIRMATION:
             case ACTIVITY:
             case WALLET:
+            case ACCOUNT_SETTINGS:
             case SECURITY:
             case SIGN_IN:
+            case ERROR:
+            case LOADING:
             case UNKNOWN:
                 return true;
             default:
                 return false;
         }
+    }
+
+    public static String apiCategory(String category) {
+        return ERROR.equals(category)
+                || LOADING.equals(category)
+                || ACCOUNT_SETTINGS.equals(category)
+                ? UNKNOWN
+                : isKnownCategory(category) ? category : UNKNOWN;
     }
 }

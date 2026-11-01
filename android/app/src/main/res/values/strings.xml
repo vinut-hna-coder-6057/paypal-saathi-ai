@@ -2,21 +2,31 @@
 <resources>
     <string name="app_name">PayPal Saathi AI</string>
     <string name="accessibility_service_name">PayPal Saathi AI Screen Monitor</string>
-    <string name="accessibility_service_description">With your explicit permission, this companion receives window-change metadata to show its assistant only while the official PayPal app is foregrounded. It reads accessible text only from that app for local rule-based screen classification. It does not save or upload screen text, click controls, or perform payments. Disable it anytime in Accessibility settings.</string>
+    <string name="accessibility_service_description">With your explicit permission, this companion receives window-change metadata to show its assistant only while the official PayPal app is foregrounded. It reads accessible text only from that app for local rule-based screen classification. Optional screenshot text recognition requires a separate consent in Saathi. It does not save or upload screen text or images. It may open a small allow-listed navigation control only after you tap the matching Saathi button; it never enters financial data or authorizes payments. Disable it anytime in Accessibility settings.</string>
 
     <string name="tagline">Simple, step-by-step payment guidance</string>
-    <string name="privacy_banner">Privacy first: with your permission, Saathi receives window-change metadata to show its independent assistant only over the official PayPal app. Accessible text from PayPal is used transiently on-device for screen classification and is not saved or uploaded. Only the detected category and a question you submit are sent to your configured Saathi server. Saathi does not click payment buttons or make payments. Never share passwords, PINs, OTPs, or card details. Verify recipient, amount, and fees in PayPal yourself.</string>
+    <string name="privacy_banner">Privacy first: with your permission, Saathi receives window-change metadata to show its independent assistant only over the official PayPal app. Accessible text from PayPal is used transiently on-device and is not saved or uploaded. Optional screenshot text recognition is off by default, requires separate consent, and is processed only on-device. Only the detected category and a question you submit are sent to your configured Saathi server. Saathi does not click payment buttons or make payments. Never share passwords, PINs, OTPs, or card details. Verify recipient, amount, and fees in PayPal yourself.</string>
     <string name="open_accessibility_settings">Open Accessibility Settings</string>
-    <string name="accessibility_how_to">Before Android opens Accessibility settings, Saathi explains that the service receives window-change metadata across apps to detect when PayPal is foregrounded, but reads accessible screen text only from the official PayPal app. Enable “PayPal Saathi AI Screen Monitor” only if you agree. To stop monitoring, disable that service.</string>
+    <string name="accessibility_how_to">Before Android opens Accessibility settings, Saathi explains that the service receives window-change metadata across apps to detect when PayPal is foregrounded, but reads accessible screen text only from the official PayPal app. Optional screenshot recognition has a separate consent setting in Saathi. Enable “PayPal Saathi AI Screen Monitor” only if you agree. To stop monitoring, disable that service.</string>
     <string name="accessibility_consent_title">About screen monitoring</string>
-    <string name="accessibility_consent_message">With your permission, Saathi receives window-change metadata across apps so it can show the assistant only while the official PayPal app is foregrounded. It reads accessible text only from that PayPal app, uses the text transiently for local screen classification, and never saves or uploads screen text. The detected category is stored on this device and may be sent with a question you submit to your configured Saathi server. The floating panel is an independent overlay, is not part of PayPal, and may cover part of the screen; minimize it before using any PayPal control. Saathi does not click controls or make payments. You can disable the service in Accessibility settings at any time.</string>
+    <string name="accessibility_consent_message">With your permission, Saathi receives window-change metadata across apps so it can show the assistant only while the official PayPal app is foregrounded. It reads accessible text only from that PayPal app, uses the text transiently for local screen classification, and never saves or uploads screen text. A separate optional setting can permit one-shot on-device screenshot text recognition when screen details are unclear; the image and recognized text are not saved or sent anywhere. The detected category is stored on this device and may be sent with a question you submit to your configured Saathi server. The floating panel is an independent overlay, is not part of PayPal, and may cover part of the screen; minimize it before using any PayPal control. Saathi can open only a verified allow-listed navigation control after you tap its matching button. It never selects recipients, enters financial data, or authorizes payments. You can disable the service in Accessibility settings at any time.</string>
     <string name="continue_to_accessibility_settings">Continue</string>
+    <string name="visual_ocr_consent">Allow optional on-device screen text recognition when screen details are unclear (Android 11+)</string>
+    <string name="visual_ocr_consent_title">Optional on-device screen reading</string>
+    <string name="visual_ocr_consent_message">If accessibility evidence is insufficient on an unknown or ambiguous PayPal screen, Saathi may capture the current screen once and recognize text only on this device. The image is not saved or sent anywhere. Only fixed generic screen hints are used; OCR cannot produce actions. The transient image may include private content, so enable this only if you agree. You can turn it off here at any time. It is unavailable on Android versions below 11 and may be blocked by secure PayPal screens.</string>
+    <string name="visual_ocr_consent_accept">Allow on-device recognition</string>
     <string name="accessibility_enabled">Accessibility service: enabled</string>
     <string name="accessibility_disabled">Accessibility service: not enabled — tap the button above to open settings</string>
     <string name="diagnostic_service_unavailable">Automatic PayPal screen detection is disabled in this diagnostic build.</string>
     <string name="backend_checking">Backend: checking…</string>
     <string name="backend_connected">Backend: connected (%1$s)</string>
     <string name="backend_unavailable">Backend: unavailable (%1$s). Offline guidance is shown when possible.</string>
+    <string name="oidc_not_configured">Remote sign-in is not configured. Local loopback development does not require sign-in.</string>
+    <string name="oidc_initialization_unavailable">Authentication is not available. Restart Saathi and try again.</string>
+    <string name="oidc_signed_in">Signed in to Saathi.</string>
+    <string name="oidc_signed_out">Sign in is required for a configured remote API.</string>
+    <string name="oidc_sign_in">Sign in to Saathi</string>
+    <string name="oidc_sign_out">Sign out</string>
 
     <string name="detected_category_waiting">Detected category: waiting for a PayPal screen event</string>
     <string name="detected_category_fmt">Detected: %1$s (%2$s)</string>
@@ -55,7 +65,7 @@
     <string name="floating_assistant_suggestion">You can ask: What can I do on this screen?</string>
     <string name="floating_assistant_suggested_question">What can I do on this screen?</string>
     <string name="floating_assistant_empty_answer">Ask a question for general guidance. Saathi cannot verify account or transaction details.</string>
-    <string name="floating_assistant_safety">Guidance only. Verify recipient, amount, currency, and fees in PayPal. Saathi never acts for you.</string>
+    <string name="floating_assistant_safety">Saathi may open a verified navigation section only when you tap its button. You choose recipients, enter details, and authorize payments yourself.</string>
     <string name="floating_assistant_question_empty">Type a general question first.</string>
     <string name="floating_assistant_question_sensitive">Please remove credentials, codes, full card numbers, and other sensitive details. Do not share them with Saathi.</string>
     <string name="floating_assistant_context_changed">The screen changed while Saathi was answering. Ask again for the current page.</string>
@@ -64,4 +74,16 @@
     <string name="floating_assistant_context_resolved">The current screen has been checked. Saathi can continue with this screen context.</string>
     <string name="floating_assistant_question_error">Could not get an answer. Check your connection and try again.</string>
     <string name="floating_assistant_no_paypal_context">PayPal is no longer the active app. Screen context was cleared.</string>
+    <string name="floating_assistant_task_title">Task: %1$s</string>
+    <string name="floating_assistant_task_progress">Step %1$d: %2$s</string>
+    <string name="floating_assistant_task_paused">This task is paused.</string>
+    <string name="floating_assistant_task_completed">Guidance finished. PayPal transaction details are not verified.</string>
+    <string name="floating_assistant_task_cancelled">This task was cancelled.</string>
+    <string name="floating_assistant_task_clarification">Please answer the question below to continue.</string>
+    <string name="floating_assistant_open_step">Open %1$s in PayPal</string>
+    <string name="floating_assistant_open_step_default">Open this safe navigation step</string>
+    <string name="floating_assistant_repeat">Repeat</string>
+    <string name="floating_assistant_pause_task">Pause</string>
+    <string name="floating_assistant_resume_task">Resume</string>
+    <string name="floating_assistant_done">Done</string>
 </resources>

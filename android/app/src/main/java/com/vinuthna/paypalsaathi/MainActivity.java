@@ -13,6 +13,7 @@ import android.provider.Settings;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -21,6 +22,7 @@ import android.widget.Toast;
 import androidx.core.content.ContextCompat;
 
 import com.vinuthna.paypalsaathi.detection.ScreenCategories;
+import com.vinuthna.paypalsaathi.auth.OidcAuthManager;
 
 import org.json.JSONObject;
 
@@ -43,6 +45,9 @@ public class MainActivity extends Activity {
     private Button refreshButton;
     private Button askButton;
     private Button retryButton;
+    private Button signInButton;
+    private Button signOutButton;
+    private TextView authenticationStatus;
 
     private String lastCategory = ScreenCategories.UNKNOWN;
     private boolean receiverRegistered = false;
@@ -143,9 +148,46 @@ public class MainActivity extends Activity {
         refreshButton = findViewById(R.id.refreshGuidanceButton);
         askButton = findViewById(R.id.askSaathiButton);
         retryButton = findViewById(R.id.retryGuidanceButton);
+        signInButton = findViewById(R.id.signInButton);
+        signOutButton = findViewById(R.id.signOutButton);
+        authenticationStatus = findViewById(R.id.authenticationStatus);
+        GuidanceClient.initialize(getApplicationContext());
+        signInButton.setOnClickListener(view -> startSaathiSignIn());
+        signOutButton.setOnClickListener(view -> signOutSaathi());
+        renderAuthenticationState();
 
         Button settingsButton =
                 findViewById(R.id.openAccessibilitySettingsButton);
+        CheckBox visualOcrConsent = findViewById(R.id.visualOcrConsent);
+        visualOcrConsent.setChecked(getSharedPreferences(
+                "saathi_privacy",
+                MODE_PRIVATE).getBoolean("visual_ocr_consent", false));
+        visualOcrConsent.setOnClickListener(view -> {
+            if (!visualOcrConsent.isChecked()) {
+                getSharedPreferences("saathi_privacy", MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("visual_ocr_consent", false)
+                        .apply();
+                return;
+            }
+            visualOcrConsent.setChecked(false);
+            new AlertDialog.Builder(MainActivity.this)
+                    .setTitle(R.string.visual_ocr_consent_title)
+                    .setMessage(R.string.visual_ocr_consent_message)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(
+                            R.string.visual_ocr_consent_accept,
+                            (dialog, which) -> {
+                                getSharedPreferences(
+                                        "saathi_privacy",
+                                        MODE_PRIVATE)
+                                        .edit()
+                                        .putBoolean("visual_ocr_consent", true)
+                                        .apply();
+                                visualOcrConsent.setChecked(true);
+                            })
+                    .show();
+        });
 
         if (BuildConfig.DIAGNOSTIC_BUILD) {
             settingsButton.setVisibility(View.GONE);
@@ -192,6 +234,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         updateServiceStatus();
+        renderAuthenticationState();
 
         String stored = CategoryStore.lastCategory(this);
         if (stored != null && !stored.equals(lastCategory)) {
@@ -206,6 +249,86 @@ public class MainActivity extends Activity {
         questionRequestTracker.invalidate();
         unregisterEventReceiver();
         super.onDestroy();
+    }
+
+    @Override
+    protected void onActivityResult(
+            int requestCode,
+            int resultCode,
+            Intent data
+    ) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != OidcAuthManager.AUTHORIZATION_REQUEST_CODE) {
+            return;
+        }
+        OidcAuthManager manager = GuidanceClient.authManager();
+        if (manager == null) {
+            return;
+        }
+        manager.handleAuthorizationResult(
+                resultCode,
+                data,
+                (success, message) -> runOnUiThread(() -> {
+                    authenticationStatus.setText(message);
+                    renderAuthenticationState();
+                    if (success) {
+                        checkBackendHealth();
+                    }
+                }));
+    }
+
+    private void startSaathiSignIn() {
+        OidcAuthManager manager = GuidanceClient.authManager();
+        if (manager == null) {
+            authenticationStatus.setText(
+                    R.string.oidc_initialization_unavailable);
+            return;
+        }
+        signInButton.setEnabled(false);
+        manager.authorize(this, (success, message) -> runOnUiThread(() -> {
+            authenticationStatus.setText(message);
+            renderAuthenticationState();
+            signInButton.setEnabled(!success);
+        }));
+    }
+
+    private void signOutSaathi() {
+        OidcAuthManager manager = GuidanceClient.authManager();
+        if (manager == null) {
+            return;
+        }
+        manager.logout(this, (success, message) -> runOnUiThread(() -> {
+            authenticationStatus.setText(message);
+            renderAuthenticationState();
+        }));
+    }
+
+    private void renderAuthenticationState() {
+        if (authenticationStatus == null
+                || signInButton == null
+                || signOutButton == null) {
+            return;
+        }
+        OidcAuthManager manager = GuidanceClient.authManager();
+        if (manager == null) {
+            authenticationStatus.setText(
+                    R.string.oidc_initialization_unavailable);
+            signInButton.setEnabled(false);
+            signOutButton.setVisibility(View.GONE);
+        } else if (!manager.isProviderConfigured()) {
+            authenticationStatus.setText(manager.configurationError());
+            signInButton.setEnabled(false);
+            signOutButton.setVisibility(View.GONE);
+        } else if (manager.isSignedIn()) {
+            authenticationStatus.setText(R.string.oidc_signed_in);
+            signInButton.setVisibility(View.GONE);
+            signOutButton.setVisibility(View.VISIBLE);
+        } else {
+            authenticationStatus.setText(R.string.oidc_signed_out);
+            signInButton.setVisibility(View.VISIBLE);
+            signInButton.setEnabled(true);
+            signOutButton.setVisibility(View.GONE);
+        }
     }
 
     private void registerEventReceiver() {

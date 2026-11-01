@@ -54,6 +54,14 @@
             android:textColor="#526078"
             android:textSize="13sp" />
 
+        <CheckBox
+            android:id="@+id/visualOcrConsent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:minHeight="48dp"
+            android:text="@string/visual_ocr_consent" />
+
         <TextView
             android:id="@+id/serviceStatus"
             android:layout_width="match_parent"
@@ -72,6 +80,30 @@
             android:text="@string/backend_checking"
             android:textColor="#35435B"
             android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/authenticationStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/oidc_not_configured"
+            android:textColor="#35435B"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/signInButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/oidc_sign_in" />
+
+        <Button
+            android:id="@+id/signOutButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/oidc_sign_out"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/currentCategory"

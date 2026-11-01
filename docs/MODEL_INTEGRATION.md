@@ -63,7 +63,7 @@ The importer extracts article headings and text, creates bounded heading-aware c
 
 - The answer model receives the question, a rule-derived intent, and the top relevant documentation excerpts. It receives neither screen category nor navigation labels nor raw accessibility text. The API uses fresh allow-listed labels separately to form a cautious, non-authoritative navigation hint.
 - The Android service extracts category-relevant text transiently, but sends only a category and a small set of exact generic navigation labels. Labels and timestamps are bounded and discarded from persisted screen state. The service continues to filter the exact PayPal package and skip password nodes.
-- OCR and vision are not enabled: physical-device event reception has been verified, so screenshot capture, added dependencies, and wider on-device data access are not justified by current evidence.
+- An optional, separately consented Android 11+ local OCR fallback can contribute only a fixed generic screen hint after an unknown/ambiguous observation. Raw OCR text and screenshots are not included in API/model requests or stored; visual-assisted requests omit the structured accessibility context. It cannot generate controls or actions. See [ON_DEVICE_VISUAL_UNDERSTANDING.md](./ON_DEVICE_VISUAL_UNDERSTANDING.md). Physical PayPal device/version/locale validation remains outstanding.
 - The current screen category never filters out otherwise relevant question evidence.
 - Below-threshold or absent evidence returns an explicit documentation-insufficient answer and does not invoke the LLM. A model's insufficiency phrase does not discard a response that also contains supported task steps.
 - Retrieval unavailable returns an explicit local-index unavailable response.
@@ -74,7 +74,7 @@ The importer extracts article headings and text, creates bounded heading-aware c
 - At most one model call runs at a time; competing requests fall back safely. Calls use bounded timeouts/output. The Ollama base URL is loopback-only and HTTP redirects are rejected.
 - `POST /api/classify` retains `category`, `guidance`, `disclaimer`, `matchedBy`, and `screenCategory`.
 
-Run `npm run diagnostics:knowledge` from `backend` to check document/chunk counts, embedding-model compatibility, SQLite integrity, last successful ingestion, and whether the configured Ollama model is installed. `/health` exposes only aggregate pipeline timing and failure counters; no question text is collected.
+Run `npm run diagnostics:knowledge` from `backend` to check document/chunk counts, embedding-model compatibility, SQLite integrity, last successful ingestion, and whether the configured Ollama model is installed. Public `/health` and `/health/ready` expose only minimal status values; they do not reveal pipeline metrics or optional dependency configuration.
 
 The model is not an account agent. It must not infer transaction status, approve payments, click controls, select recipients, or repeat credential values. Verify any actionable detail against the official PayPal app and cited Help Center page.
 

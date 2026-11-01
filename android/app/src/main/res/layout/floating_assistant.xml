@@ -111,6 +111,70 @@
             android:textSize="13sp" />
 
         <TextView
+            android:id="@+id/floatingAssistantTask"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="#172033"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/floatingAssistantTaskProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#35435B"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/floatingAssistantOpenStep"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/floating_assistant_open_step_default"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            style="?android:attr/buttonBarStyle">
+
+            <Button
+                android:id="@+id/floatingAssistantRepeat"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minHeight="44dp"
+                style="?android:attr/buttonBarButtonStyle"
+                android:text="@string/floating_assistant_repeat"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/floatingAssistantPause"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minHeight="44dp"
+                style="?android:attr/buttonBarButtonStyle"
+                android:text="@string/floating_assistant_pause_task"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/floatingAssistantDone"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minHeight="44dp"
+                style="?android:attr/buttonBarButtonStyle"
+                android:text="@string/floating_assistant_done"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
             android:id="@+id/floatingAssistantSuggestion"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

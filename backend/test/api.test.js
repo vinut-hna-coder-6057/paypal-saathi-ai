@@ -1,11 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, sign as signJwt } from 'node:crypto';
 import http from 'node:http';
 import { createApp } from '../src/app.js';
 import { createClassifyRouter } from '../src/routes/classify.js';
 import express from 'express';
 import { errorHandler } from '../src/middleware/errors.js';
 process.env.PAYPAL_KB_DB_PATH = ':memory:';
+
+const { publicKey, privateKey } = generateKeyPairSync('rsa', {
+  modulusLength: 2048
+});
+const publicKeyPem = publicKey.export({
+  type: 'spki',
+  format: 'pem'
+}).toString();
+const AUTH_ISSUER = 'https://identity.example.test/';
+const AUTH_AUDIENCE = 'paypal-saathi-api';
+const REQUIRED_SCOPE = 'saathi:guidance';
+
+function protectedEnvironment() {
+  return {
+    NODE_ENV: 'production',
+    HOST: '127.0.0.1',
+    AUTH_PUBLIC_KEY_PEM: publicKeyPem,
+    AUTH_ISSUER,
+    AUTH_AUDIENCE
+  };
+}
+
+function createAccessToken(overrides = {}) {
+  const nowSeconds = Math.floor(Date.now() / 1_000);
+  const header = Buffer.from(JSON.stringify({
+    alg: 'RS256',
+    typ: 'JWT'
+  })).toString('base64url');
+  const claims = Buffer.from(JSON.stringify({
+    iss: AUTH_ISSUER,
+    sub: 'test-user',
+    aud: AUTH_AUDIENCE,
+    iat: nowSeconds,
+    exp: nowSeconds + 300,
+    scope: REQUIRED_SCOPE,
+    ...overrides
+  })).toString('base64url');
+  const signingInput = `${header}.${claims}`;
+  const signature = signJwt(
+    'RSA-SHA256',
+    Buffer.from(signingInput),
+    privateKey
+  ).toString('base64url');
+  return `${signingInput}.${signature}`;
+}
 
 function listen(app) {
   return new Promise((resolve, reject) => {
@@ -18,14 +64,19 @@ function listen(app) {
   });
 }
 
-async function request(port, method, path, body) {
+async function request(port, method, path, body, authorization) {
   const payload = body === undefined ? null : JSON.stringify(body);
+  const headers = {};
+  if (payload !== null) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (authorization) {
+    headers.Authorization = authorization;
+  }
 
   const response = await fetch(`http://127.0.0.1:${port}${path}`, {
     method,
-    headers: payload
-      ? { 'Content-Type': 'application/json' }
-      : undefined,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: payload
   });
 
@@ -41,29 +92,141 @@ async function request(port, method, path, body) {
   return { status: response.status, json, text };
 }
 
-test('GET /health returns service metadata', async () => {
-  const app = createApp();
+test('health and readiness endpoints return only minimal public status', async () => {
+  const app = createApp({ environment: protectedEnvironment() });
   const { server, port } = await listen(app);
 
   try {
     const { status, json } = await request(port, 'GET', '/health');
     assert.equal(status, 200);
     assert.equal(json.status, 'ok');
-    assert.equal(json.classifier, 'rules');
-    assert.equal(json.modelIntegrated, true);
-    assert.ok(Array.isArray(json.supportedScreenCategories));
-    assert.deepEqual(
-      Object.keys(json).sort(),
-      [
-        'status',
-        'service',
-        'version',
-        'classifier',
-        'modelIntegrated',
-        'pipelineMetrics',
-        'supportedScreenCategories'
-      ].sort()
+    assert.deepEqual(Object.keys(json), ['status']);
+    assert.equal(json.auth, undefined);
+    assert.equal(json.configuration, undefined);
+    assert.equal(json.pipelineMetrics, undefined);
+
+    const readiness = await request(port, 'GET', '/health/ready');
+    assert.equal(readiness.status, 200);
+    assert.deepEqual(readiness.json, { status: 'ready' });
+  } finally {
+    server.close();
+  }
+});
+
+test('protected API endpoints reject requests without authentication', async () => {
+  const app = createApp({ environment: protectedEnvironment() });
+  const { server, port } = await listen(app);
+
+  try {
+    for (const [path, body] of [
+      ['/api/guidance', { screenCategory: 'home' }],
+      ['/api/classify', { question: 'How do I send money?' }]
+    ]) {
+      const { status, json } = await request(port, 'POST', path, body);
+      assert.equal(status, 401);
+      assert.deepEqual(json, { error: 'Authentication required' });
+    }
+  } finally {
+    server.close();
+  }
+});
+
+test('protected API endpoints reject invalid and expired bearer tokens', async () => {
+  const app = createApp({ environment: protectedEnvironment() });
+  const { server, port } = await listen(app);
+  const nowSeconds = Math.floor(Date.now() / 1_000);
+
+  try {
+    const invalidAuthorizations = [
+      'Bearer not.a.valid-token',
+      `Bearer ${createAccessToken({ aud: 'another-api' })}`,
+      `Bearer ${createAccessToken({
+        iss: 'https://untrusted.example.test/'
+      })}`
+    ];
+    for (const authorization of invalidAuthorizations) {
+      const invalid = await request(
+        port,
+        'POST',
+        '/api/guidance',
+        { screenCategory: 'home' },
+        authorization
+      );
+      assert.equal(invalid.status, 401);
+    }
+
+    const [header, claims, signature] = createAccessToken().split('.');
+    const invalidSignature = await request(
+      port,
+      'POST',
+      '/api/guidance',
+      { screenCategory: 'home' },
+      `Bearer ${header}.${claims}.${signature.slice(0, -2)}aa`
     );
+    assert.equal(invalidSignature.status, 401);
+
+    const expiredToken = createAccessToken({
+      iat: nowSeconds - 60,
+      exp: nowSeconds - 1
+    });
+    const expired = await request(
+      port,
+      'POST',
+      '/api/guidance',
+      { screenCategory: 'home' },
+      `Bearer ${expiredToken}`
+    );
+    assert.equal(expired.status, 401);
+  } finally {
+    server.close();
+  }
+});
+
+test('valid bearer authentication authorizes guidance and RAG endpoints', async () => {
+  const app = createApp({ environment: protectedEnvironment() });
+  const { server, port } = await listen(app);
+  const authorization = `Bearer ${createAccessToken()}`;
+
+  try {
+    const guidance = await request(
+      port,
+      'POST',
+      '/api/guidance',
+      { screenCategory: 'review_payment' },
+      authorization
+    );
+    assert.equal(guidance.status, 200);
+    assert.equal(guidance.json.category, 'review_payment');
+
+    const answer = await request(
+      port,
+      'POST',
+      '/api/classify',
+      { question: 'How do I send money?' },
+      authorization
+    );
+    assert.equal(answer.status, 200);
+    assert.equal(answer.json.category, 'send_money');
+  } finally {
+    server.close();
+  }
+});
+
+test('valid authentication without the guidance scope is forbidden', async () => {
+  const app = createApp({ environment: protectedEnvironment() });
+  const { server, port } = await listen(app);
+  const token = createAccessToken({ scope: 'profile:read' });
+
+  try {
+    const response = await request(
+      port,
+      'POST',
+      '/api/guidance',
+      { screenCategory: 'home' },
+      `Bearer ${token}`
+    );
+    assert.equal(response.status, 403);
+    assert.deepEqual(response.json, { error: 'Insufficient permissions' });
   } finally {
     server.close();
   }

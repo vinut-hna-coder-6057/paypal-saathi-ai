@@ -5,6 +5,23 @@ plugins {
 // Emulator is the default; override API_BASE_URL for a phone using adb reverse.
 def apiBaseUrl = project.findProperty('API_BASE_URL') ?: 'http://10.0.2.2:3000'
 def releaseApiBaseUrl = project.findProperty('RELEASE_API_BASE_URL') ?: 'https://api.example.com'
+def oidcIssuer = project.findProperty('OIDC_ISSUER')
+        ?: System.getenv('PAYPAL_SAATHI_OIDC_ISSUER') ?: ''
+def oidcClientId = project.findProperty('OIDC_CLIENT_ID')
+        ?: System.getenv('PAYPAL_SAATHI_OIDC_CLIENT_ID') ?: ''
+def oidcAudience = project.findProperty('OIDC_AUDIENCE')
+        ?: System.getenv('PAYPAL_SAATHI_OIDC_AUDIENCE') ?: ''
+def oidcRevocationEndpoint = project.findProperty('OIDC_REVOCATION_ENDPOINT')
+        ?: System.getenv('PAYPAL_SAATHI_OIDC_REVOCATION_ENDPOINT') ?: ''
+def oidcScope = project.findProperty('OIDC_SCOPE')
+        ?: System.getenv('PAYPAL_SAATHI_OIDC_SCOPE') ?: 'openid saathi:guidance'
+def oidcRedirectUri = project.findProperty('OIDC_REDIRECT_URI')
+        ?: System.getenv('PAYPAL_SAATHI_OIDC_REDIRECT_URI')
+        ?: 'com.vinuthna.paypalsaathi:/oauth2redirect'
+def oidcRedirectScheme = URI.create(oidcRedirectUri).scheme
+def buildConfigString = { value ->
+    groovy.json.JsonOutput.toJson(value.toString())
+}
 def releaseSigning = [
     storeFile: providers.environmentVariable('PAYPAL_SAATHI_RELEASE_STORE_FILE').orNull,
     storePassword: providers.environmentVariable('PAYPAL_SAATHI_RELEASE_STORE_PASSWORD').orNull,
@@ -25,6 +42,9 @@ android {
         targetSdk 35
         versionCode 1
         versionName '0.1.0'
+        manifestPlaceholders = [
+            appAuthRedirectScheme: oidcRedirectScheme
+        ]
     }
 
     buildFeatures {
@@ -46,6 +66,12 @@ android {
         debug {
             buildConfigField 'boolean', 'DIAGNOSTIC_BUILD', 'false'
             buildConfigField 'String', 'API_BASE_URL', "\"${apiBaseUrl}\""
+            buildConfigField 'String', 'OIDC_ISSUER', buildConfigString(oidcIssuer)
+            buildConfigField 'String', 'OIDC_CLIENT_ID', buildConfigString(oidcClientId)
+            buildConfigField 'String', 'OIDC_AUDIENCE', buildConfigString(oidcAudience)
+            buildConfigField 'String', 'OIDC_REVOCATION_ENDPOINT', buildConfigString(oidcRevocationEndpoint)
+            buildConfigField 'String', 'OIDC_SCOPE', buildConfigString(oidcScope)
+            buildConfigField 'String', 'OIDC_REDIRECT_URI', buildConfigString(oidcRedirectUri)
         }
         diagnosticDebug {
             initWith debug
@@ -53,13 +79,26 @@ android {
             matchingFallbacks = ['debug']
             buildConfigField 'boolean', 'DIAGNOSTIC_BUILD', 'true'
             buildConfigField 'String', 'API_BASE_URL', '"http://127.0.0.1:3000"'
+            buildConfigField 'String', 'OIDC_ISSUER', buildConfigString(oidcIssuer)
+            buildConfigField 'String', 'OIDC_CLIENT_ID', buildConfigString(oidcClientId)
+            buildConfigField 'String', 'OIDC_AUDIENCE', buildConfigString(oidcAudience)
+            buildConfigField 'String', 'OIDC_REVOCATION_ENDPOINT', buildConfigString(oidcRevocationEndpoint)
+            buildConfigField 'String', 'OIDC_SCOPE', buildConfigString(oidcScope)
+            buildConfigField 'String', 'OIDC_REDIRECT_URI', buildConfigString(oidcRedirectUri)
         }
         release {
             minifyEnabled false
             if (releaseSigningConfigured) {
                 signingConfig signingConfigs.release
             }
+            buildConfigField 'boolean', 'DIAGNOSTIC_BUILD', 'false'
             buildConfigField 'String', 'API_BASE_URL', "\"${releaseApiBaseUrl}\""
+            buildConfigField 'String', 'OIDC_ISSUER', buildConfigString(oidcIssuer)
+            buildConfigField 'String', 'OIDC_CLIENT_ID', buildConfigString(oidcClientId)
+            buildConfigField 'String', 'OIDC_AUDIENCE', buildConfigString(oidcAudience)
+            buildConfigField 'String', 'OIDC_REVOCATION_ENDPOINT', buildConfigString(oidcRevocationEndpoint)
+            buildConfigField 'String', 'OIDC_SCOPE', buildConfigString(oidcScope)
+            buildConfigField 'String', 'OIDC_REDIRECT_URI', buildConfigString(oidcRedirectUri)
         }
     }
 
@@ -69,8 +108,17 @@ android {
     }
 }
 
+configurations.configureEach {
+    resolutionStrategy.force(
+            'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22',
+            'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22')
+}
+
 dependencies {
     implementation 'androidx.core:core:1.15.0'
+    implementation 'net.openid:appauth:0.11.1'
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.mlkit:text-recognition-devanagari:16.0.1'
     testImplementation 'junit:junit:4.13.2'
 }
 
@@ -108,6 +156,45 @@ def verifyReleaseConfiguration = tasks.register('verifyReleaseConfiguration') {
                 || releaseUri.host.toLowerCase(Locale.ROOT).endsWith('.example.com')) {
             throw new GradleException(
                     'Set RELEASE_API_BASE_URL to the deployed HTTPS API before building a release.')
+        }
+
+        if ([oidcIssuer, oidcClientId, oidcAudience, oidcScope, oidcRedirectUri]
+                .any { it == null || it.trim().isEmpty() }) {
+            throw new GradleException(
+                    'Configure OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_AUDIENCE, ' +
+                    'OIDC_SCOPE, and OIDC_REDIRECT_URI before building a release.')
+        }
+        def issuerUri = new URI(oidcIssuer)
+        if (!'https'.equalsIgnoreCase(issuerUri.scheme)
+                || issuerUri.host == null
+                || issuerUri.userInfo != null
+                || issuerUri.fragment != null
+                || issuerUri.query != null) {
+            throw new GradleException('OIDC_ISSUER must be a trusted HTTPS URL.')
+        }
+        def configuredScopes = oidcScope.trim().split(/\s+/) as Set
+        if (!configuredScopes.contains('openid')
+                || !configuredScopes.contains('saathi:guidance')) {
+            throw new GradleException(
+                    'OIDC_SCOPE must include openid and saathi:guidance.')
+        }
+        def redirectUri = new URI(oidcRedirectUri)
+        if (redirectUri.scheme == null
+                || 'http'.equalsIgnoreCase(redirectUri.scheme)
+                || redirectUri.fragment != null
+                || redirectUri.userInfo != null) {
+            throw new GradleException('OIDC_REDIRECT_URI is invalid.')
+        }
+        if (oidcRevocationEndpoint != null
+                && !oidcRevocationEndpoint.trim().isEmpty()) {
+            def revocationUri = new URI(oidcRevocationEndpoint)
+            if (!'https'.equalsIgnoreCase(revocationUri.scheme)
+                    || revocationUri.host == null
+                    || revocationUri.userInfo != null
+                    || revocationUri.fragment != null) {
+                throw new GradleException(
+                        'OIDC_REVOCATION_ENDPOINT must be an HTTPS URL.')
+            }
         }
     }
 }

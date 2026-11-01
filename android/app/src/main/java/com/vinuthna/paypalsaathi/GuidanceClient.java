@@ -1,7 +1,12 @@
 package com.vinuthna.paypalsaathi;
 
+import android.content.Context;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import com.vinuthna.paypalsaathi.detection.ScreenCategories;
+import com.vinuthna.paypalsaathi.auth.OidcAuthManager;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -9,7 +14,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,6 +32,7 @@ public final class GuidanceClient {
 
     private static final ExecutorService EXECUTOR =
             Executors.newSingleThreadExecutor();
+    private static volatile OidcAuthManager authManager;
 
     public interface Callback {
         void onSuccess(JSONObject response);
@@ -33,6 +41,16 @@ public final class GuidanceClient {
     }
 
     private GuidanceClient() {}
+
+    public static synchronized void initialize(Context context) {
+        if (authManager == null) {
+            authManager = new OidcAuthManager(context);
+        }
+    }
+
+    public static OidcAuthManager authManager() {
+        return authManager;
+    }
 
     public static String baseUrl() {
         return BuildConfig.API_BASE_URL;
@@ -72,7 +90,7 @@ public final class GuidanceClient {
         JSONObject body = new JSONObject();
 
         try {
-            body.put("screenCategory", category);
+            body.put("screenCategory", ScreenCategories.apiCategory(category));
         } catch (Exception exception) {
             callback.onError("Could not prepare the guidance request.");
             return;
@@ -129,12 +147,16 @@ public final class GuidanceClient {
 
         try {
             body.put("question", question);
-            body.put("screenCategory", screenCategory);
+            String apiScreenCategory = ScreenCategories.apiCategory(screenCategory);
+            boolean unknownApiCategory =
+                    ScreenCategories.UNKNOWN.equals(apiScreenCategory);
+            body.put("screenCategory", apiScreenCategory);
             long contextAge = System.currentTimeMillis() - observedAt;
             if (observedAt > 0L && contextAge >= -5_000L
-                    && contextAge <= 15_000L) {
+                    && contextAge <= 15_000L
+                    && shouldSendAccessibilityContext(evidenceCodes)) {
                 JSONObject screenContext = new JSONObject();
-                screenContext.put("category", screenCategory);
+                screenContext.put("category", apiScreenCategory);
                 JSONArray safeLabels = new JSONArray();
                 for (String label : ScreenContext.sanitizeNavigationLabels(
                         visibleLabels)) {
@@ -147,18 +169,22 @@ public final class GuidanceClient {
                     safeActions.put(action);
                 }
                 screenContext.put("actionableElements", safeActions);
-                screenContext.put("confidence", Math.max(0, Math.min(
-                        confidence, 100)));
+                screenContext.put(
+                        "confidence",
+                        unknownApiCategory ? 0 : Math.max(0, Math.min(
+                                confidence, 100)));
+                boolean strongEvidence = "strong".equals(evidenceStrength)
+                        || "moderate".equals(evidenceStrength);
                 screenContext.put(
                         "evidenceStrength",
-                        "strong".equals(evidenceStrength)
-                                || "moderate".equals(evidenceStrength)
-                                ? evidenceStrength
-                                : "insufficient");
-                screenContext.put("ambiguous", ambiguous);
+                        !unknownApiCategory && strongEvidence
+                                ? evidenceStrength : "insufficient");
+                screenContext.put("ambiguous", ambiguous || unknownApiCategory);
                 JSONArray safeEvidenceCodes = new JSONArray();
-                for (String code : ScreenContext.sanitizeEvidenceCodes(
-                        evidenceCodes)) {
+                List<String> contextEvidenceCodes = unknownApiCategory
+                        ? Collections.singletonList("insufficient_accessibility")
+                        : ScreenContext.sanitizeEvidenceCodes(evidenceCodes);
+                for (String code : contextEvidenceCodes) {
                     safeEvidenceCodes.put(code);
                 }
                 screenContext.put("evidenceCodes", safeEvidenceCodes);
@@ -180,6 +206,40 @@ public final class GuidanceClient {
             Callback callback,
             int readTimeoutMs
     ) {
+        OidcAuthManager manager = authManager;
+        if (manager != null && manager.isProviderConfigured()) {
+            manager.withFreshAccessToken((accessToken, error) -> {
+                if (error != null || accessToken == null) {
+                    callback.onError(error == null
+                            ? "Sign in to Saathi to use the remote API."
+                            : error);
+                    return;
+                }
+
+                sendPost(path, body, callback, readTimeoutMs, accessToken);
+            });
+            return;
+        }
+        if (requiresAuthentication()) {
+            callback.onError(manager != null
+                    ? manager.configurationError()
+                    : "Remote API access requires OIDC sign-in configuration.");
+            return;
+        }
+        sendPost(path, body, callback, readTimeoutMs, null);
+    }
+
+    static boolean shouldSendAccessibilityContext(List<String> evidenceCodes) {
+        return !ScreenContext.includesVisualFallback(evidenceCodes);
+    }
+
+    private static void sendPost(
+            String path,
+            JSONObject body,
+            Callback callback,
+            int readTimeoutMs,
+            String accessToken
+    ) {
         EXECUTOR.execute(() -> {
             HttpURLConnection connection = null;
 
@@ -192,6 +252,11 @@ public final class GuidanceClient {
                 connection.setDoOutput(true);
                 connection.setRequestProperty(
                         "Content-Type", "application/json; charset=UTF-8");
+                if (accessToken != null) {
+                    connection.setRequestProperty(
+                            "Authorization",
+                            "Bearer " + accessToken);
+                }
 
                 byte[] payload =
                         body.toString().getBytes(StandardCharsets.UTF_8);
@@ -204,6 +269,14 @@ public final class GuidanceClient {
                 String text = readBody(connection, status);
 
                 if (status < 200 || status >= 300) {
+                    if (status == HttpURLConnection.HTTP_UNAUTHORIZED
+                            && authManager != null
+                            && accessToken != null) {
+                        authManager.invalidateAuthorization();
+                        callback.onError(
+                                "Your Saathi sign-in was rejected. Please sign in again.");
+                        return;
+                    }
                     String serverError = extractError(text);
                     callback.onError(
                             serverError != null
@@ -227,6 +300,28 @@ public final class GuidanceClient {
                 }
             }
         });
+    }
+
+    private static boolean requiresAuthentication() {
+        if (BuildConfig.DEBUG) {
+            String host = apiHost();
+            if ("127.0.0.1".equals(host)
+                    || "::1".equals(host)
+                    || "localhost".equalsIgnoreCase(host)
+                    || "10.0.2.2".equals(host)
+                    || "10.0.3.2".equals(host)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String apiHost() {
+        try {
+            return new URI(baseUrl()).getHost();
+        } catch (Exception exception) {
+            return null;
+        }
     }
 
     private static String readBody(HttpURLConnection connection, int status)

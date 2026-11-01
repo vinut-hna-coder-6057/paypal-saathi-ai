@@ -135,9 +135,14 @@ public class ScreenClassifierTest {
                 ScreenClassifier.classify("Sign in")
         );
         assertEquals(
+                ScreenCategories.UNKNOWN,
+                ScreenClassifier.classify("Send money"));
+        assertEquals(
                 ScreenCategories.SEND_MONEY,
-                ScreenClassifier.classify("Send money")
-        );
+                ScreenClassifier.classifyScreen(
+                        "Send money",
+                        Collections.singletonList("Continue|middle|center"),
+                        "com.paypal.android.p2pmobile").category());
         assertEquals(
                 ScreenCategories.RECIPIENT_SELECTION,
                 ScreenClassifier.classify("Who do you want to pay?")
@@ -163,9 +168,24 @@ public class ScreenClassifierTest {
                 ScreenClassifier.classify("Banks and cards")
         );
         assertEquals(
+                ScreenCategories.ACCOUNT_SETTINGS,
+                ScreenClassifier.classify("Account settings")
+        );
+        assertEquals(
                 ScreenCategories.SECURITY,
                 ScreenClassifier.classify("Two-step verification")
         );
+    }
+
+    @Test
+    public void accountSettingsIsLocalOnlyAndNotSentAsAnUnknownBackendCategory() {
+        assertEquals(
+                ScreenCategories.ACCOUNT_SETTINGS,
+                ScreenClassifier.classify("Account settings"));
+        assertEquals(
+                ScreenCategories.UNKNOWN,
+                ScreenCategories.apiCategory(
+                        ScreenCategories.ACCOUNT_SETTINGS));
     }
 
     @Test
@@ -198,6 +218,9 @@ public class ScreenClassifierTest {
                 ScreenCategories.UNKNOWN,
                 ScreenClassifier.classify("Send the document for payment")
         );
+        assertEquals(
+                ScreenCategories.UNKNOWN,
+                ScreenClassifier.classify("Send money"));
         assertEquals(
                 ScreenCategories.UNKNOWN,
                 ScreenClassifier.classify("Settings Notifications Help")

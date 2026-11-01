@@ -13,8 +13,11 @@ public final class ScreenContext {
             "unrelated_package",
             "insufficient_accessibility",
             "conflicting_screen_signals",
+            "conflicting_loading_error_signals",
             "authentication_prompt",
             "sign_in_prompt",
+            "loading_screen",
+            "error_screen",
             "review_prompt",
             "confirmation_prompt",
             "amount_prompt",
@@ -23,7 +26,9 @@ public final class ScreenContext {
             "send_flow_heading",
             "wallet_heading",
             "activity_heading",
-            "home_heading");
+            "home_heading",
+            "settings_heading",
+            "visual_fallback");
     private ScreenContext() {}
 
     public static String safeNavigationLabel(CharSequence value) {
@@ -185,6 +190,10 @@ public final class ScreenContext {
             }
         }
         return Collections.unmodifiableList(new ArrayList<>(safe));
+    }
+
+    public static boolean includesVisualFallback(List<String> codes) {
+        return codes != null && codes.contains("visual_fallback");
     }
 
     private static String positionBand(

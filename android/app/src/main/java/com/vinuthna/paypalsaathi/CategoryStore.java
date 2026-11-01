@@ -8,7 +8,7 @@ import com.vinuthna.paypalsaathi.detection.ScreenCategories;
 /**
  * Persists the last detected screen category so guidance can be shown
  * after the user returns from PayPal (receiver may have been paused).
- * Stores only the category ID — never raw screen text.
+ * Stores bounded classification metadata only, never raw screen text.
  */
 public final class CategoryStore {
     private static final String PREFS = "saathi_screen_state";
